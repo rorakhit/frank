@@ -93,14 +93,14 @@ export async function runPaycheckCheckForTransactions(txs: Record<string, unknow
   const group = byDate[latestDate]
   const totalAmount = group.reduce((s, tx) => s + Number(tx['amount']), 0)
 
-  const fiveDaysAgo = new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString()
-  const recentReport = await sql<Array<{ id: string }>>`
+  // Skip if we already processed a paycheck for this exact deposit date
+  const existingForDate = await sql<Array<{ id: string }>>`
     SELECT id FROM savings_events
-    WHERE created_at >= ${fiveDaysAgo}
+    WHERE period_end = ${latestDate}
     LIMIT 1
   `
 
-  if (!recentReport.length) {
+  if (!existingForDate.length) {
     // Use first tx as representative but override amount with combined total
     await handlePaycheckDetected({ ...(group[0] as any), amount: totalAmount, date: latestDate })
   }
