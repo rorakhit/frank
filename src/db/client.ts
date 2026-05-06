@@ -1,12 +1,6 @@
-import { createClient } from '@supabase/supabase-js'
+import postgres from 'postgres'
 
-const url = process.env.SUPABASE_URL
-const key = process.env.SUPABASE_SERVICE_ROLE_KEY
+const DATABASE_URL = process.env.DATABASE_URL
+if (!DATABASE_URL) throw new Error('DATABASE_URL must be set')
 
-if (!url || !key) {
-  throw new Error('SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must be set')
-}
-
-export const db = createClient(url, key, {
-  auth: { persistSession: false },
-})
+export const sql = postgres(DATABASE_URL, { ssl: 'require' })

@@ -1,5 +1,5 @@
 import { anthropic } from '../categorize/claude.js'
-import { db } from '../db/client.js'
+import { sql } from '../db/client.js'
 import { getAggregatesForPeriod } from './aggregate.js'
 import { writeNotionReport, updateNotionDashboards } from './notion.js'
 
@@ -142,57 +142,52 @@ Be concrete. Factor in credit obligations. No preamble.`
 }
 
 async function getPaycheckAllocation(paycheckAmount: number, agg: PeriodAggregates): Promise<string> {
-  const { data: goalRow } = await db
-    .from('savings_goals')
-    .select('target_type, target_value')
-    .order('created_at', { ascending: false })
-    .limit(1)
-    .single()
+  const [goalRow] = await sql<Array<{ target_type: string; target_value: number }>>`
+    SELECT target_type, target_value FROM savings_goals
+    ORDER BY created_at DESC
+    LIMIT 1
+  `
 
   const savingsGoalDesc = goalRow
     ? goalRow.target_type === 'percentage'
-      ? `${goalRow.target_value}% of paycheck ($${(paycheckAmount * goalRow.target_value / 100).toFixed(2)})`
+      ? `${goalRow.target_value}% of paycheck ($${(paycheckAmount * Number(goalRow.target_value) / 100).toFixed(2)})`
       : `$${Number(goalRow.target_value).toFixed(2)} fixed per paycheck`
     : '$100/month'
 
-  const { data: allRecurring } = await db
-    .from('recurring_charges')
-    .select('merchant_name, average_amount, is_pre_allocated, pre_allocated_amount')
-    .eq('is_active', true)
+  const [allRecurring, latestGoalsRows] = await Promise.all([
+    sql<Array<{ merchant_name: string | null; average_amount: number | null }>>`
+      SELECT merchant_name, average_amount FROM recurring_charges WHERE is_active = true
+    `,
+    sql<Array<{ goals: string }>>`
+      SELECT goals FROM insights
+      WHERE goals IS NOT NULL
+      ORDER BY generated_at DESC
+      LIMIT 1
+    `,
+  ])
+  const latestGoals = latestGoalsRows[0]
 
-  const preAllocated = (allRecurring ?? []).filter(r => r.is_pre_allocated)
-  const discretionary = (allRecurring ?? []).filter(r => !r.is_pre_allocated)
+  const recurringTotal = allRecurring.reduce((s, r) => s + Number(r.average_amount ?? 0), 0)
 
-  const preTotal = preAllocated.reduce((s, r) => s + Number(r.pre_allocated_amount ?? r.average_amount ?? 0), 0)
-  const discTotal = discretionary.reduce((s, r) => s + Number(r.average_amount ?? 0), 0)
-
-  const preLines = preAllocated.length
-    ? preAllocated.map(r => `  ${r.merchant_name}: $${Number(r.pre_allocated_amount ?? r.average_amount).toFixed(2)}`).join('\n')
-    : '  None'
-
-  const discLines = discretionary.length
-    ? discretionary.map(r => `  ${r.merchant_name}: ~$${Number(r.average_amount).toFixed(2)}`).join('\n')
+  const recurringLines = allRecurring.length
+    ? allRecurring.map(r => `  ${r.merchant_name}: ~$${Number(r.average_amount).toFixed(2)}/mo`).join('\n')
     : '  None'
 
   const creditLines = agg.creditSummary.cards
     .map(c => `  ${c.name}: $${c.balance.toFixed(2)} balance / $${c.limit.toFixed(2)} limit (${c.utilization}% util, ${c.apr}% APR, $${c.monthlyInterest.toFixed(2)}/mo interest)`)
     .join('\n') || '  None'
 
-  const remaining = paycheckAmount - preTotal
+  const goalsSection = latestGoals?.goals
+    ? `\nActive goals from last planning session:\n${latestGoals.goals}\n`
+    : ''
 
   const prompt = `You are a personal finance advisor helping someone allocate their paycheck.
 
-Paycheck: $${paycheckAmount.toFixed(2)}
+Paycheck (combined from split direct deposit): $${paycheckAmount.toFixed(2)}
 
-Pre-allocated (auto-handled, dedicated accounts — do not include in advice):
-${preLines}
-Pre-allocated total: $${preTotal.toFixed(2)}
-
-Remaining after pre-allocated: $${remaining.toFixed(2)}
-
-Discretionary recurring charges to cover from remaining (monthly averages, pro-rated ~2 weeks):
-${discLines}
-Discretionary total / mo: ~$${discTotal.toFixed(2)} (~$${(discTotal / 2).toFixed(2)} this period)
+Recurring charges across all accounts (monthly averages, pro-rate ~2 weeks for this period):
+${recurringLines}
+Recurring total / mo: ~$${recurringTotal.toFixed(2)} (~$${(recurringTotal / 2).toFixed(2)} this period)
 
 Savings goal: ${savingsGoalDesc}
 
@@ -200,10 +195,10 @@ Credit card balances:
 ${creditLines}
 
 Average daily spend last period: $${(agg.totalSpend / 14).toFixed(2)}/day
-
-From the remaining $${remaining.toFixed(2)}, suggest a specific allocation. Format as a short list:
+${goalsSection}
+Suggest a specific allocation for this paycheck. Format as a short list:
 - Savings: $X — [one-line reason]
-- Discretionary bills buffer: $X — [covers which charges]
+- Bills buffer: $X — [covers which charges this period]
 - [Credit card] payment: $X — [whether to pay minimum, more, or hold]
 - Spending money: $X
 
@@ -274,29 +269,66 @@ export async function handlePaycheckDetected(tx: Transaction): Promise<void> {
     .order('created_at', { ascending: false })
     .limit(1)
 
-  const periodStart = lastEvent?.[0]?.period_end ?? new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
-  const periodEnd = tx.date
-
-  const { data: creditAccts } = await db
-    .from('credit_accounts')
-    .select('account_id')
-
-  for (const ca of creditAccts ?? []) {
-    const { data: allTx } = await db
-      .from('transactions')
-      .select('amount, is_income, category')
-      .eq('account_id', ca.account_id)
-
-    const balance = (allTx ?? []).reduce((sum, t) => {
-      if (t.category === 'Credit Payment') return sum - Number(t.amount)
-      if (!t.is_income) return sum + Number(t.amount)
-      return sum
-    }, 0)
-
-    await db.from('balance_snapshots').insert({
-      account_id: ca.account_id,
-      balance: Math.max(0, balance),
+  const txLines = transactions
+    .map(t => {
+      const flags = [t.is_income ? 'income' : null, t.is_recurring ? 'recurring' : null].filter(Boolean).join(', ')
+      return `  ${t.date}  ${(t.merchant_name ?? 'Unknown').padEnd(35)}  $${Number(t.amount).toFixed(2).padStart(8)}  ${t.category ?? 'Uncategorized'}${flags ? `  [${flags}]` : ''}`
     })
+    .join('\n')
+
+  const txSection = transactions.length
+    ? `\nFull transaction list for this period:\n${txLines}`
+    : '\nNo transactions found for this period.'
+
+  const priorSection = originalNarrative
+    ? `\n\nOriginal report for this period (written when transactions were first synced):\n"""\n${originalNarrative}\n"""\n\nSome transactions may have been re-categorized, recurring flags updated, or new transactions synced since then.`
+    : ''
+
+  const prompt = `You are a personal finance advisor. This is a REGENERATED analysis of the same paycheck period, run after the user updated their transaction data (re-categorizations, recurring flag changes, etc.).${priorSection}
+
+Current aggregates:
+${contextStr}
+${txSection}
+
+Write a 3-5 paragraph plain-English analysis covering:
+1. Overall spending health — use the transaction list to call out specific merchants or patterns worth noting
+2. Notable category trends (good and bad) — if re-categorizations changed the picture from the original, call that out
+3. Credit health — utilization level, whether it's moving in the right direction, interest cost context
+4. 2-3 specific, actionable recommendations grounded in actual transactions
+
+Be direct and honest. Use exact dollar amounts. If the original report exists, briefly note what changed or was corrected. No preamble or sign-off.`
+
+  const message = await anthropic.messages.create({
+    model: 'claude-sonnet-4-6',
+    max_tokens: 1500,
+    messages: [{ role: 'user', content: prompt }],
+  })
+
+  return message.content[0].type === 'text' ? message.content[0].text : ''
+}
+
+export const getSavingsRecommendationForRegen = getSavingsRecommendation
+export const getPaycheckAllocationForRegen = getPaycheckAllocation
+
+export async function handlePaycheckDetected(tx: Transaction): Promise<void> {
+  const lastEvent = await sql<Array<{ created_at: string; period_end: string }>>`
+    SELECT created_at, period_end FROM savings_events
+    ORDER BY created_at DESC
+    LIMIT 1
+  `
+
+  const lastPeriodEnd = lastEvent[0]?.period_end
+  const defaultStart = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+  let periodStart = defaultStart
+  if (lastPeriodEnd) {
+    const d = new Date(lastPeriodEnd)
+    d.setUTCDate(d.getUTCDate() + 1)
+    periodStart = d.toISOString().split('T')[0]
+  }
+  const periodEnd = tx.date
+  // Guard: if period collapsed (same-day or backwards), fall back to 14 days prior
+  if (periodStart >= periodEnd) {
+    periodStart = new Date(new Date(periodEnd).getTime() - 14 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
   }
 
   const agg = await getAggregatesForPeriod(periodStart, periodEnd, 'biweekly')
@@ -306,13 +338,11 @@ export async function handlePaycheckDetected(tx: Transaction): Promise<void> {
     getPaycheckAllocation(tx.amount, agg),
   ])
 
-  await db.from('insights').insert({
-    period_start: periodStart,
-    period_end: periodEnd,
-    period_type: 'biweekly',
-    raw_analysis: narrative,
-    key_findings: { savings_recommendation: savingsRec, paycheck_allocation: allocation },
-  })
+  const keyFindings = JSON.stringify({ savings_recommendation: savingsRec, paycheck_allocation: allocation })
+  await sql`
+    INSERT INTO insights (period_start, period_end, period_type, raw_analysis, key_findings)
+    VALUES (${periodStart}, ${periodEnd}, 'biweekly', ${narrative}, ${keyFindings}::jsonb)
+  `
 
   await db.from('savings_events').insert({
     paycheck_amount: tx.amount,
@@ -325,14 +355,14 @@ export async function handlePaycheckDetected(tx: Transaction): Promise<void> {
   if (notionEnabled()) await updateNotionDashboards(agg)
 
   if (agg.creditSummary.trend === 'growing') {
-    const { data: priorSnapshots } = await db
-      .from('balance_snapshots')
-      .select('account_id, balance, snapshot_at')
-      .order('snapshot_at', { ascending: false })
-      .limit(agg.creditSummary.cards.length * 4)
+    const priorSnapshots = await sql<Array<{ account_id: string; balance: number; snapshot_at: string }>>`
+      SELECT account_id, balance, snapshot_at FROM balance_snapshots
+      ORDER BY snapshot_at DESC
+      LIMIT ${agg.creditSummary.cards.length * 4}
+    `
 
     const byAccount: Record<string, number[]> = {}
-    for (const snap of priorSnapshots ?? []) {
+    for (const snap of priorSnapshots) {
       if (!byAccount[snap.account_id]) byAccount[snap.account_id] = []
       if (byAccount[snap.account_id].length < 3) byAccount[snap.account_id].push(Number(snap.balance))
     }
@@ -359,24 +389,24 @@ export async function handlePaycheckDetected(tx: Transaction): Promise<void> {
     .map(([cat, amt]) => `${cat}: $${amt.toFixed(2)}`)
     .join(', ')
 
+  const baseUrl = process.env.APP_URL ?? 'https://rorakhit-autobudget.up.railway.app'
   const emailBody = [
-    `Paycheck received: $${tx.amount.toFixed(2)}`,
+    `Paycheck received: $${Number(tx.amount).toFixed(2)}`,
     '',
-    `Period summary (${periodStart} → ${periodEnd}):`,
-    `  Total spend: $${agg.totalSpend.toFixed(2)}`,
-    `  Top categories: ${topCategories}`,
+    `Period: ${periodStart} → ${periodEnd}`,
+    `  Spend: $${agg.totalSpend.toFixed(2)}   Top: ${topCategories}`,
     `  Credit utilization: ${agg.creditSummary.totalUtilization}%`,
     '',
-    `How to allocate this paycheck:`,
+    `── Paycheck allocation ──`,
     allocation,
     '',
-    `Savings recommendation:`,
+    `── Savings recommendation ──`,
     savingsRec,
     '',
     ...(notionPageUrl ? [`Full report: ${notionPageUrl}`] : []),
   ].join('\n')
 
-  await sendEmail(`Paycheck received: $${tx.amount.toFixed(2)}`, emailBody)
+  await sendEmail(`Paycheck: $${Number(tx.amount).toFixed(2)}`, emailBody)
 }
 
 export async function runMonthlyReport(year: number, month: number): Promise<void> {
@@ -387,12 +417,10 @@ export async function runMonthlyReport(year: number, month: number): Promise<voi
   const agg = await getAggregatesForPeriod(periodStart, periodEnd, 'monthly')
   const narrative = await generateNarrative(agg, 'monthly')
 
-  await db.from('insights').insert({
-    period_start: periodStart,
-    period_end: periodEnd,
-    period_type: 'monthly',
-    raw_analysis: narrative,
-  })
+  await sql`
+    INSERT INTO insights (period_start, period_end, period_type, raw_analysis)
+    VALUES (${periodStart}, ${periodEnd}, 'monthly', ${narrative})
+  `
 
   if (notionEnabled()) {
     await writeNotionReport(agg, narrative, 'monthly')
@@ -410,12 +438,10 @@ export async function runYearlyReport(year: number): Promise<void> {
 
   const narrative = await generateNarrative(agg, 'yearly')
 
-  await db.from('insights').insert({
-    period_start: periodStart,
-    period_end: periodEnd,
-    period_type: 'yearly',
-    raw_analysis: narrative,
-  })
+  await sql`
+    INSERT INTO insights (period_start, period_end, period_type, raw_analysis)
+    VALUES (${periodStart}, ${periodEnd}, 'yearly', ${narrative})
+  `
 
   const notionPageUrl = notionEnabled() ? await writeNotionReport(agg, narrative, 'yearly') : null
 
@@ -429,8 +455,8 @@ export async function runYearlyReport(year: number): Promise<void> {
     `Total interest paid: $${agg.creditSummary.totalMonthlyInterest.toFixed(2)}/mo average`,
     ...(notionPageUrl ? ['', `Full report: ${notionPageUrl}`] : []),
     '',
-    narrative.split('\n').slice(0, 6).join('\n'),
+    `Full report: ${baseUrl}/reports`,
   ].join('\n')
 
-  await sendEmail(`${year} Year in Review`, highlights)
+  await sendEmail(`${year} Year in Review`, emailBody)
 }

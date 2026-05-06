@@ -1,4 +1,4 @@
-<h1><img src="public/icon.svg" height="32" alt="" /> AutoBudget</h1>
+<h1><img src="public/icon.png" height="32" alt="" /> GhostPaper</h1>
 
 Self-hosted personal finance automation. Connects to your bank accounts via Plaid, categorizes transactions with Claude AI, and surfaces spending insights through a built-in web dashboard, Gmail alerts, and optional Notion reports.
 

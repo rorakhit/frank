@@ -61,12 +61,13 @@ app.get('/home/stats', homeStatsHandler)
 
 // Webhook + Plaid link
 app.post('/webhook', webhookHandler)
-app.get('/link', linkHandler)
+app.get('/link', servePage('link.html', true))
 app.get('/link/token', linkTokenHandler)
 app.get('/link/accounts', linkedAccountsHandler)
 app.post('/link/repair-webhooks', repairWebhooksHandler)
 app.post('/link/sync-all', syncAllHandler)
-app.post('/link/refresh-notion', refreshNotionHandler)
+app.get('/link/status', itemStatusHandler)
+app.post('/link/reauth-token', reauthTokenHandler)
 app.post('/link/exchange', linkExchangeHandler)
 app.get('/oauth-return', oauthReturnHandler)
 

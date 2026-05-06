@@ -1,4 +1,4 @@
-import { db } from '../db/client.js'
+import { sql } from '../db/client.js'
 import type { Transaction } from '../types.js'
 import { sendAlert } from './gmail.js'
 import { enrichAlertContext } from './enrich.js'
@@ -31,50 +31,46 @@ export function getCreditUtilization(balance: number, limit: number): number {
 
 async function getTodaySpend(excludeTransactionId: string): Promise<number> {
   const today = new Date().toISOString().split('T')[0]
-  const { data } = await db
-    .from('transactions')
-    .select('amount')
-    .eq('date', today)
-    .eq('is_income', false)
-    .neq('plaid_transaction_id', excludeTransactionId)
-  return (data ?? []).reduce((sum, tx) => sum + Number(tx.amount), 0)
+  const rows = await sql<Array<{ amount: number }>>`
+    SELECT amount FROM transactions
+    WHERE date = ${today} AND is_income = false AND plaid_transaction_id <> ${excludeTransactionId}
+  `
+  return rows.reduce((sum, tx) => sum + Number(tx.amount), 0)
 }
 
 async function getRecentTransactionsForMerchant(
   merchantName: string,
   excludeId: string
 ): Promise<Array<{ merchant_name: string | null; amount: number; created_at: string }>> {
-  const { data } = await db
-    .from('transactions')
-    .select('merchant_name, amount, created_at')
-    .eq('merchant_name', merchantName)
-    .neq('plaid_transaction_id', excludeId)
-    .order('created_at', { ascending: false })
-    .limit(10)
-  return data ?? []
+  const rows = await sql<Array<{ merchant_name: string | null; amount: number; created_at: string }>>`
+    SELECT merchant_name, amount, created_at FROM transactions
+    WHERE merchant_name = ${merchantName} AND plaid_transaction_id <> ${excludeId}
+    ORDER BY created_at DESC
+    LIMIT 10
+  `
+  return rows
 }
 
 async function getCreditAccountsWithBalances(): Promise<Array<{
   name: string; mask: string | null; balance: number; limit: number; apr: number
 }>> {
-  const { data: creditAccts } = await db
-    .from('credit_accounts')
-    .select('account_id, apr, credit_limit, accounts(name, mask)')
-
-  if (!creditAccts) return []
+  const creditAccts = await sql<Array<{ account_id: string; apr: number; credit_limit: number; name: string; mask: string | null }>>`
+    SELECT ca.account_id, ca.apr, ca.credit_limit, a.name, a.mask
+    FROM credit_accounts ca
+    LEFT JOIN accounts a ON a.id = ca.account_id
+  `
 
   const results = []
   for (const ca of creditAccts) {
-    const { data: snapshots } = await db
-      .from('balance_snapshots')
-      .select('balance')
-      .eq('account_id', ca.account_id)
-      .order('snapshot_at', { ascending: false })
-      .limit(1)
+    const snapshots = await sql<Array<{ balance: number }>>`
+      SELECT balance FROM balance_snapshots
+      WHERE account_id = ${ca.account_id}
+      ORDER BY snapshot_at DESC
+      LIMIT 1
+    `
 
-    const balance = snapshots?.[0]?.balance ?? 0
-    const acct = ca.accounts as unknown as { name: string; mask: string | null }
-    results.push({ name: acct.name, mask: acct.mask, balance, limit: Number(ca.credit_limit), apr: Number(ca.apr) })
+    const balance = Number(snapshots[0]?.balance ?? 0)
+    results.push({ name: ca.name, mask: ca.mask, balance, limit: Number(ca.credit_limit), apr: Number(ca.apr) })
   }
   return results
 }
@@ -100,11 +96,11 @@ export async function checkAlertsForTransaction(tx: Transaction): Promise<void> 
   }
 
   if (tx.is_recurring) {
-    const { data: existing } = await db
-      .from('recurring_charges')
-      .select('first_seen')
-      .eq('merchant_name', merchant)
-      .single()
+    const [existing] = await sql<Array<{ first_seen: string }>>`
+      SELECT first_seen FROM recurring_charges
+      WHERE merchant_name = ${merchant}
+      LIMIT 1
+    `
     if (existing?.first_seen === tx.date) {
       await sendAlert({
         type: 'new_subscription',
