@@ -2,15 +2,11 @@ import { Client } from '@notionhq/client'
 import { db } from '../db/client.js'
 import type { PeriodAggregates } from '../types.js'
 
-function getNotionClient() {
-  if (!process.env.NOTION_TOKEN) throw new Error('NOTION_TOKEN is not set — Notion integration is disabled')
-  return new Client({ auth: process.env.NOTION_TOKEN })
-}
+if (!process.env.NOTION_TOKEN) throw new Error('NOTION_TOKEN must be set')
+if (!process.env.NOTION_ROOT_PAGE_ID) throw new Error('NOTION_ROOT_PAGE_ID must be set')
 
-function getRootPageId(): string {
-  if (!process.env.NOTION_ROOT_PAGE_ID) throw new Error('NOTION_ROOT_PAGE_ID is not set — Notion integration is disabled')
-  return process.env.NOTION_ROOT_PAGE_ID
-}
+const notion = new Client({ auth: process.env.NOTION_TOKEN })
+const ROOT_PAGE_ID = process.env.NOTION_ROOT_PAGE_ID
 
 async function getOrCreatePage(semanticId: string, title: string, parentId: string): Promise<string> {
   const { data } = await db
@@ -21,7 +17,7 @@ async function getOrCreatePage(semanticId: string, title: string, parentId: stri
 
   if (data) return data.notion_page_id
 
-  const page = await getNotionClient().pages.create({
+  const page = await notion.pages.create({
     parent: { page_id: parentId },
     properties: {
       title: { title: [{ text: { content: title } }] },
@@ -33,7 +29,7 @@ async function getOrCreatePage(semanticId: string, title: string, parentId: stri
 }
 
 async function getOrCreateReportsFolder(): Promise<string> {
-  return getOrCreatePage('reports_folder', '📅 Reports', getRootPageId())
+  return getOrCreatePage('reports_folder', '📅 Reports', ROOT_PAGE_ID)
 }
 
 function h1(text: string) {
@@ -61,15 +57,15 @@ function callout(text: string, emoji: string) {
 async function replacePageContent(pageId: string, blocks: object[]): Promise<void> {
   let cursor: string | undefined
   do {
-    const existing = await getNotionClient().blocks.children.list({ block_id: pageId, start_cursor: cursor, page_size: 100 })
+    const existing = await notion.blocks.children.list({ block_id: pageId, start_cursor: cursor, page_size: 100 })
     for (const block of existing.results) {
-      await getNotionClient().blocks.delete({ block_id: block.id })
+      await notion.blocks.delete({ block_id: block.id })
     }
     cursor = existing.has_more ? existing.next_cursor ?? undefined : undefined
   } while (cursor)
 
   for (let i = 0; i < blocks.length; i += 100) {
-    await getNotionClient().blocks.children.append({
+    await notion.blocks.children.append({
       block_id: pageId,
       children: blocks.slice(i, i + 100) as any,
     })
@@ -243,7 +239,7 @@ function buildReportBlocks(agg: PeriodAggregates, narrative: string, periodType:
 
 export async function writeNotionHomepage(): Promise<void> {
   const blocks = buildHomepageBlocks()
-  await replacePageContent(getRootPageId(), blocks)
+  await replacePageContent(ROOT_PAGE_ID, blocks)
 }
 
 export async function writeNotionReport(
@@ -259,7 +255,7 @@ export async function writeNotionReport(
     ? `${agg.periodStart.slice(0, 7)} Monthly Report`
     : `${agg.periodStart} – ${agg.periodEnd}`
 
-  const page = await getNotionClient().pages.create({
+  const page = await notion.pages.create({
     parent: { page_id: reportsFolder },
     properties: {
       title: { title: [{ text: { content: pageTitle } }] },
@@ -267,22 +263,22 @@ export async function writeNotionReport(
   })
 
   const blocks = buildReportBlocks(agg, narrative, periodType)
-  await getNotionClient().blocks.children.append({ block_id: page.id, children: blocks as any })
+  await notion.blocks.children.append({ block_id: page.id, children: blocks as any })
 
-  return `https://getNotionClient().so/${page.id.replace(/-/g, '')}`
+  return `https://notion.so/${page.id.replace(/-/g, '')}`
 }
 
 export async function updateNotionDashboards(agg: PeriodAggregates): Promise<void> {
-  const overviewId = await getOrCreatePage('overview', '🏠 Overview', getRootPageId())
-  const creditId = await getOrCreatePage('credit_health', '💳 Credit Health', getRootPageId())
-  const savingsId = await getOrCreatePage('savings_plan', '💰 Savings Plan', getRootPageId())
+  const overviewId = await getOrCreatePage('overview', '🏠 Overview', ROOT_PAGE_ID)
+  const creditId = await getOrCreatePage('credit_health', '💳 Credit Health', ROOT_PAGE_ID)
+  const savingsId = await getOrCreatePage('savings_plan', '💰 Savings Plan', ROOT_PAGE_ID)
 
   await replacePageContent(overviewId, buildOverviewBlocks(agg))
   await replacePageContent(creditId, buildCreditHealthBlocks(agg))
   await replacePageContent(savingsId, buildSavingsPlanBlocks(agg))
 
   if (agg.periodType === 'monthly' || agg.periodType === 'yearly') {
-    const historicalId = await getOrCreatePage('historical', '📈 Historical', getRootPageId())
+    const historicalId = await getOrCreatePage('historical', '📈 Historical', ROOT_PAGE_ID)
     await replacePageContent(historicalId, buildHistoricalBlocks(agg))
   }
 }
@@ -302,18 +298,18 @@ export async function writeRecentTransactions(): Promise<void> {
     .order('date', { ascending: false })
     .limit(100)
 
-  const pageId = await getOrCreatePage('recent_transactions', '🔍 Recent Transactions', getRootPageId())
+  const pageId = await getOrCreatePage('recent_transactions', '🔍 Recent Transactions', ROOT_PAGE_ID)
 
   // Clear existing content
   let cursor: string | undefined
   do {
-    const existing = await getNotionClient().blocks.children.list({ block_id: pageId, start_cursor: cursor, page_size: 100 })
-    for (const block of existing.results) await getNotionClient().blocks.delete({ block_id: block.id })
+    const existing = await notion.blocks.children.list({ block_id: pageId, start_cursor: cursor, page_size: 100 })
+    for (const block of existing.results) await notion.blocks.delete({ block_id: block.id })
     cursor = existing.has_more ? existing.next_cursor ?? undefined : undefined
   } while (cursor)
 
   if (!data?.length) {
-    await getNotionClient().blocks.children.append({ block_id: pageId, children: [bullet('No transactions yet.')] as any })
+    await notion.blocks.children.append({ block_id: pageId, children: [bullet('No transactions yet.')] as any })
     return
   }
 
@@ -335,14 +331,14 @@ export async function writeRecentTransactions(): Promise<void> {
 
   // Create table with header + first batch of rows (Notion limit: 100 children per request)
   const firstBatch = dataRows.slice(0, 99)
-  const createResp = await getNotionClient().blocks.children.append({
+  const createResp = await notion.blocks.children.append({
     block_id: pageId,
     children: [{ type: 'table', table: { table_width: 7, has_column_header: true, has_row_header: false, children: [headerRow, ...firstBatch] } }] as any,
   })
   const tableId = (createResp.results[0] as any).id
 
   for (let i = 99; i < dataRows.length; i += 100) {
-    await getNotionClient().blocks.children.append({ block_id: tableId, children: dataRows.slice(i, i + 100) as any })
+    await notion.blocks.children.append({ block_id: tableId, children: dataRows.slice(i, i + 100) as any })
   }
 }
 
@@ -354,18 +350,18 @@ export async function writeFlaggedTransactions(): Promise<void> {
     .order('date', { ascending: false })
     .limit(200)
 
-  const flaggedId = await getOrCreatePage('flagged_transactions', '🚩 Flagged Transactions', getRootPageId())
+  const flaggedId = await getOrCreatePage('flagged_transactions', '🚩 Flagged Transactions', ROOT_PAGE_ID)
 
   // Clear existing content
   let cursor: string | undefined
   do {
-    const existing = await getNotionClient().blocks.children.list({ block_id: flaggedId, start_cursor: cursor, page_size: 100 })
-    for (const block of existing.results) await getNotionClient().blocks.delete({ block_id: block.id })
+    const existing = await notion.blocks.children.list({ block_id: flaggedId, start_cursor: cursor, page_size: 100 })
+    for (const block of existing.results) await notion.blocks.delete({ block_id: block.id })
     cursor = existing.has_more ? existing.next_cursor ?? undefined : undefined
   } while (cursor)
 
   if (!data?.length) {
-    await getNotionClient().blocks.children.append({ block_id: flaggedId, children: [bullet('No flagged transactions.')] as any })
+    await notion.blocks.children.append({ block_id: flaggedId, children: [bullet('No flagged transactions.')] as any })
     return
   }
 
@@ -379,13 +375,13 @@ export async function writeFlaggedTransactions(): Promise<void> {
   ]))
 
   const firstBatch = dataRows.slice(0, 99)
-  const createResp = await getNotionClient().blocks.children.append({
+  const createResp = await notion.blocks.children.append({
     block_id: flaggedId,
     children: [{ type: 'table', table: { table_width: 5, has_column_header: true, has_row_header: false, children: [headerRow, ...firstBatch] } }] as any,
   })
   const tableId = (createResp.results[0] as any).id
 
   for (let i = 99; i < dataRows.length; i += 100) {
-    await getNotionClient().blocks.children.append({ block_id: tableId, children: dataRows.slice(i, i + 100) as any })
+    await notion.blocks.children.append({ block_id: tableId, children: dataRows.slice(i, i + 100) as any })
   }
 }

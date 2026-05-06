@@ -1,9 +1,9 @@
 import { CATEGORIES } from '../types.js'
-import { sql } from './client.js'
+import { db } from './client.js'
 
 export async function getAllCategories(): Promise<string[]> {
-  const rows = await sql<{ name: string }[]>`SELECT name FROM custom_categories ORDER BY name`
-  const custom = rows.map(r => r.name)
+  const { data } = await db.from('custom_categories').select('name').order('name')
+  const custom = (data ?? []).map(r => r.name as string)
   return [...CATEGORIES, ...custom]
 }
 

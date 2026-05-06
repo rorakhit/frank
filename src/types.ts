@@ -90,13 +90,19 @@ export interface SavingsEvent {
   created_at: string
 }
 
+export interface NotionPage {
+  id: string
+  notion_page_id: string
+  created_at: string
+}
+
 // ── Categorization ──────────────────────────────────────────────────────────
 
 export const CATEGORIES = [
   'Groceries', 'Dining', 'Food Delivery', 'Transport', 'Entertainment',
   'Shopping', 'Subscriptions', 'Utilities', 'Rent/Housing', 'Healthcare',
   'Travel', 'Income', 'Savings Transfer', 'Credit Payment', 'Loan Repayment',
-  'Condo Fee', 'Dog', 'Hair', 'Interest', 'Investments', 'Software Projects', 'Other',
+  'Gouda', 'Hair', 'Interest', 'Investments', 'Software Projects', 'Other',
 ] as const
 
 export type Category = typeof CATEGORIES[number]

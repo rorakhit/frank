@@ -1,4 +1,4 @@
-import { sql } from '../db/client.js'
+import { db } from '../db/client.js'
 import type { PeriodAggregates, CreditSummary, CreditCardSummary, LoanSummary, LoanAccountSummary, RecurringCharge, SavingsEvent } from '../types.js'
 
 export function calculateSavingsRate(income: number, spend: number): number {
@@ -28,39 +28,30 @@ export function getCreditUtilizationLevel(utilization: number): 'ok' | 'warning'
 }
 
 async function getCreditSummary(): Promise<CreditSummary> {
-  const creditAccts = await sql<Array<{
-    account_id: string
-    apr: number
-    credit_limit: number
-    is_variable_rate: boolean
-    name: string
-    mask: string | null
-  }>>`
-    SELECT ca.account_id, ca.apr, ca.credit_limit, ca.is_variable_rate,
-           a.name, a.mask
-    FROM credit_accounts ca
-    LEFT JOIN accounts a ON a.id = ca.account_id
-  `
+  const { data: creditAccts } = await db
+    .from('credit_accounts')
+    .select('account_id, apr, credit_limit, is_variable_rate, accounts(name, mask)')
 
   const cards: CreditCardSummary[] = []
 
-  for (const ca of creditAccts) {
-    const snapshots = await sql<Array<{ balance: number; snapshot_at: string }>>`
-      SELECT balance, snapshot_at FROM balance_snapshots
-      WHERE account_id = ${ca.account_id}
-      ORDER BY snapshot_at DESC
-      LIMIT 1
-    `
+  for (const ca of creditAccts ?? []) {
+    const { data: snapshots } = await db
+      .from('balance_snapshots')
+      .select('balance, snapshot_at')
+      .eq('account_id', ca.account_id)
+      .order('snapshot_at', { ascending: false })
+      .limit(1)
 
-    const balance = Number(snapshots[0]?.balance ?? 0)
+    const balance = Number(snapshots?.[0]?.balance ?? 0)
     const limit = Number(ca.credit_limit)
     const apr = Number(ca.apr)
     const utilization = limit > 0 ? Math.round((balance / limit) * 100) : 0
+    const acct = ca.accounts as unknown as { name: string; mask: string | null }
 
     cards.push({
       accountId: ca.account_id,
-      name: ca.name,
-      mask: ca.mask,
+      name: acct.name,
+      mask: acct.mask,
       balance,
       limit,
       utilization,
@@ -71,18 +62,15 @@ async function getCreditSummary(): Promise<CreditSummary> {
     })
   }
 
-  const cardAccountIds = cards.map(c => c.accountId)
-  const recentSnapshots = cardAccountIds.length > 0
-    ? await sql<Array<{ account_id: string; balance: number; snapshot_at: string }>>`
-        SELECT account_id, balance, snapshot_at FROM balance_snapshots
-        WHERE account_id = ANY(${cardAccountIds})
-        ORDER BY snapshot_at DESC
-        LIMIT ${cards.length * 3}
-      `
-    : []
+  const { data: recentSnapshots } = await db
+    .from('balance_snapshots')
+    .select('account_id, balance, snapshot_at')
+    .in('account_id', cards.map(c => c.accountId))
+    .order('snapshot_at', { ascending: false })
+    .limit(cards.length * 3)
 
   let trend: CreditSummary['trend'] = 'unknown'
-  if (recentSnapshots.length >= cards.length * 2) {
+  if (recentSnapshots && recentSnapshots.length >= cards.length * 2) {
     const byAccount: Record<string, number[]> = {}
     for (const snap of recentSnapshots) {
       if (!byAccount[snap.account_id]) byAccount[snap.account_id] = []
@@ -109,39 +97,43 @@ async function getCreditSummary(): Promise<CreditSummary> {
 }
 
 async function getLoanSummary(periodStart: string): Promise<LoanSummary> {
-  const loanAccts = await sql<Array<{ id: string; name: string; mask: string | null; subtype: string | null }>>`
-    SELECT id, name, mask, subtype FROM accounts WHERE type = 'loan'
-  `
+  const { data: loanAccts } = await db
+    .from('accounts')
+    .select('id, name, mask, subtype')
+    .eq('type', 'loan')
 
-  const loanMeta = await sql<Array<{ account_id: string; apr: number | null; original_balance: number | null }>>`
-    SELECT account_id, apr, original_balance FROM loan_accounts
-  `
+  const { data: loanMeta } = await db
+    .from('loan_accounts')
+    .select('account_id, apr, original_balance')
 
-  const metaMap = Object.fromEntries(loanMeta.map(r => [r.account_id, r]))
+  const metaMap = Object.fromEntries((loanMeta ?? []).map(r => [r.account_id, r]))
 
   const loans: LoanAccountSummary[] = []
 
-  for (const acct of loanAccts) {
+  for (const acct of loanAccts ?? []) {
     const meta = metaMap[acct.id]
 
-    const [latestSnap] = await sql<Array<{ balance: number }>>`
-      SELECT balance FROM balance_snapshots
-      WHERE account_id = ${acct.id}
-      ORDER BY snapshot_at DESC
-      LIMIT 1
-    `
+    const { data: latestSnap } = await db
+      .from('balance_snapshots')
+      .select('balance')
+      .eq('account_id', acct.id)
+      .order('snapshot_at', { ascending: false })
+      .limit(1)
+      .single()
 
-    const [yearStartSnap] = await sql<Array<{ balance: number }>>`
-      SELECT balance FROM balance_snapshots
-      WHERE account_id = ${acct.id} AND snapshot_at <= ${periodStart}
-      ORDER BY snapshot_at DESC
-      LIMIT 1
-    `
+    const { data: yearStartSnap } = await db
+      .from('balance_snapshots')
+      .select('balance')
+      .eq('account_id', acct.id)
+      .lte('snapshot_at', periodStart)
+      .order('snapshot_at', { ascending: false })
+      .limit(1)
+      .single()
 
     const currentBalance = Number(latestSnap?.balance ?? 0)
     const yearStartBalance = yearStartSnap ? Number(yearStartSnap.balance) : null
     const principalPaid = yearStartBalance !== null ? Math.max(0, yearStartBalance - currentBalance) : null
-    const apr = meta?.apr != null ? Number(meta.apr) : null
+    const apr = meta?.apr ? Number(meta.apr) : null
 
     // Estimate interest paid as avg balance × monthly rate × months elapsed
     let estimatedInterestPaid: number | null = null
@@ -163,7 +155,7 @@ async function getLoanSummary(periodStart: string): Promise<LoanSummary> {
       mask: acct.mask,
       subtype: acct.subtype,
       currentBalance,
-      originalBalance: meta?.original_balance != null ? Number(meta.original_balance) : null,
+      originalBalance: meta?.original_balance ? Number(meta.original_balance) : null,
       apr,
       yearStartBalance,
       principalPaidThisYear: principalPaid,
@@ -184,18 +176,14 @@ export async function getAggregatesForPeriod(
   periodEnd: string,
   periodType: 'biweekly' | 'monthly' | 'yearly'
 ): Promise<PeriodAggregates> {
-  const allTx = await sql<Array<{
-    amount: number
-    category: string | null
-    merchant_name: string | null
-    date: string
-    is_income: boolean
-  }>>`
-    SELECT amount, category, merchant_name, date, is_income FROM transactions
-    WHERE date >= ${periodStart} AND date <= ${periodEnd}
-    ORDER BY amount DESC
-  `
+  const { data: txs } = await db
+    .from('transactions')
+    .select('amount, category, merchant_name, date, is_income')
+    .gte('date', periodStart)
+    .lte('date', periodEnd)
+    .order('amount', { ascending: false })
 
+  const allTx = txs ?? []
   const spendTx = allTx.filter(t => !t.is_income)
   const incomeTx = allTx.filter(t => t.is_income)
 
@@ -215,26 +203,16 @@ export async function getAggregatesForPeriod(
     category: t.category ?? 'Other',
   }))
 
-  // Build recurring charges from manually-flagged transactions
-  const recurringTxs = await sql<Array<{ merchant_name: string | null; amount: number; date: string; account_id: string | null }>>`
-    SELECT merchant_name, amount, date, account_id FROM transactions
-    WHERE is_recurring = true AND is_income = false
-    ORDER BY date DESC
-  `
+  const { data: recurringRaw } = await db
+    .from('recurring_charges')
+    .select('*')
+    .eq('is_active', true)
 
-  const recurringMap = new Map<string, { merchant_name: string; average_amount: number; last_seen: string; account_id: string | null }>()
-  for (const tx of recurringTxs) {
-    const key = tx.merchant_name ?? 'Unknown'
-    if (!recurringMap.has(key)) {
-      recurringMap.set(key, { merchant_name: key, average_amount: Number(tx.amount), last_seen: tx.date, account_id: tx.account_id })
-    }
-  }
-  const recurringRaw = Array.from(recurringMap.values())
-
-  const savingsEventsRaw = await sql<Array<any>>`
-    SELECT * FROM savings_events
-    WHERE created_at >= ${periodStart} AND created_at <= ${periodEnd}
-  `
+  const { data: savingsEventsRaw } = await db
+    .from('savings_events')
+    .select('*')
+    .gte('created_at', periodStart)
+    .lte('created_at', periodEnd)
 
   const [creditSummary, loanSummary] = await Promise.all([
     getCreditSummary(),
@@ -252,9 +230,9 @@ export async function getAggregatesForPeriod(
     savingsRate,
     categoryBreakdown,
     largestPurchases,
-    activeRecurringCharges: recurringRaw as unknown as RecurringCharge[],
+    activeRecurringCharges: (recurringRaw ?? []) as RecurringCharge[],
     creditSummary,
     loanSummary,
-    savingsEvents: savingsEventsRaw as SavingsEvent[],
+    savingsEvents: (savingsEventsRaw ?? []) as SavingsEvent[],
   }
 }

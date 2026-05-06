@@ -1,7 +1,7 @@
 import { anthropic } from './claude.js'
 import { CATEGORIES, type Category, type CategorizationResult } from '../types.js'
 import { getAllCategories } from '../db/categories.js'
-import { sql } from '../db/client.js'
+import { db } from '../db/client.js'
 
 interface HistoryEntry {
   category: string
@@ -72,18 +72,17 @@ export function parseCategorizationResponse(raw: string): CategorizationResult {
 async function getMerchantHistory(merchantName: string): Promise<HistoryEntry[]> {
   const since = new Date()
   since.setDate(since.getDate() - 90)
-  const sinceStr = since.toISOString().split('T')[0]
 
-  const rows = await sql<Array<{ category: string | null; amount: number; date: string }>>`
-    SELECT category, amount, date FROM transactions
-    WHERE merchant_name = ${merchantName}
-      AND date >= ${sinceStr}
-      AND category IS NOT NULL
-    ORDER BY date DESC
-    LIMIT 20
-  `
+  const { data } = await db
+    .from('transactions')
+    .select('category, amount, date')
+    .eq('merchant_name', merchantName)
+    .gte('date', since.toISOString().split('T')[0])
+    .not('category', 'is', null)
+    .order('date', { ascending: false })
+    .limit(20)
 
-  return rows.map(r => ({
+  return (data ?? []).map(r => ({
     category: r.category as string,
     amount: Number(r.amount),
     date: r.date,

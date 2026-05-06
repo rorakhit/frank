@@ -73,9 +73,7 @@ coverage/
 .claude/
 
 # =============================================================================
-# AI assistant internals (not for public repo)
+# Implementation plans (AI-generated, not for public repo)
 # =============================================================================
-docs/superpowers/
+docs/superpowers/plans/
 .superpowers/
-OSS_SETUP.md
-HANDOFF.md

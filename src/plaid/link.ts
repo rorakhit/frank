@@ -1,21 +1,19 @@
 import { checkAuth, checkAuthPage } from '../auth.js'
 import type { FastifyRequest, FastifyReply } from 'fastify'
 import { plaidClient } from './client.js'
-import { sql } from '../db/client.js'
+import { db } from '../db/client.js'
 import { syncTransactions } from './sync.js'
-import { runPaycheckCheckForTransactions } from './webhook.js'
+import { writeNotionHomepage } from '../reports/notion.js'
 import { CountryCode, Products } from 'plaid'
 import { readFileSync } from 'fs'
 import { fileURLToPath } from 'url'
 import { dirname, join } from 'path'
 
-type PlaidErrorCode = string | null | undefined
-
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
 async function createLinkToken() {
   const response = await plaidClient.linkTokenCreate({
-    user: { client_user_id: 'user' },
+    user: { client_user_id: 'ro' },
     client_name: 'AutoBudget',
     products: [Products.Transactions],
     country_codes: [CountryCode.Us],
@@ -28,7 +26,9 @@ async function createLinkToken() {
 
 export async function linkHandler(req: FastifyRequest, reply: FastifyReply) {
   if (!checkAuthPage(req, reply)) return
+  const token = await createLinkToken()
   const html = readFileSync(join(__dirname, '../../public/link.html'), 'utf8')
+    .replace('__LINK_TOKEN__', token)
   await reply.type('text/html').send(html)
 }
 
@@ -40,34 +40,18 @@ export async function linkTokenHandler(req: FastifyRequest, reply: FastifyReply)
 
 export async function linkedAccountsHandler(req: FastifyRequest, reply: FastifyReply) {
   if (!checkAuth(req, reply)) return
-
-  const itemRows = await sql<Array<{ id: string; institution_name: string }>>`
-    SELECT id, institution_name FROM plaid_items
-    ORDER BY created_at ASC
-  `
-
-  // Fetch accounts for all items
-  const itemIds = itemRows.map(i => i.id)
-  const accountRows = itemIds.length > 0
-    ? await sql<Array<{ plaid_item_id: string; name: string; type: string; subtype: string | null; mask: string | null }>>`
-        SELECT plaid_item_id, name, type, subtype, mask FROM accounts
-        WHERE plaid_item_id = ANY(${itemIds})
-      `
-    : []
-
-  const accountsByItem: Record<string, unknown[]> = {}
-  for (const a of accountRows) {
-    if (!accountsByItem[a.plaid_item_id]) accountsByItem[a.plaid_item_id] = []
-    accountsByItem[a.plaid_item_id].push({ name: a.name, type: a.type, subtype: a.subtype, mask: a.mask })
-  }
+  const { data: items } = await db
+    .from('plaid_items')
+    .select('id, institution_name, accounts(name, type, subtype, mask)')
+    .order('created_at', { ascending: true })
 
   // Group multiple items at the same institution into one entry
   const grouped: Record<string, { institution_name: string; accounts: unknown[] }> = {}
-  for (const item of itemRows) {
+  for (const item of items ?? []) {
     if (!grouped[item.institution_name]) {
       grouped[item.institution_name] = { institution_name: item.institution_name, accounts: [] }
     }
-    grouped[item.institution_name].accounts.push(...(accountsByItem[item.id] ?? []))
+    grouped[item.institution_name].accounts.push(...((item.accounts as unknown[]) ?? []))
   }
 
   await reply.send(Object.values(grouped))
@@ -79,10 +63,8 @@ export async function repairWebhooksHandler(req: FastifyRequest, reply: FastifyR
   const webhookUrl = process.env.PLAID_WEBHOOK_URL
   if (!webhookUrl) return reply.code(400).send({ error: 'PLAID_WEBHOOK_URL not set' })
 
-  const items = await sql<Array<{ id: string; plaid_item_id: string; access_token: string; institution_name: string }>>`
-    SELECT id, plaid_item_id, access_token, institution_name FROM plaid_items
-  `
-  if (!items.length) return reply.send({ updated: [] })
+  const { data: items } = await db.from('plaid_items').select('id, plaid_item_id, access_token, institution_name')
+  if (!items?.length) return reply.send({ updated: [] })
 
   const results = await Promise.all(items.map(async item => {
     try {
@@ -100,10 +82,6 @@ export async function refreshNotionHandler(req: FastifyRequest, reply: FastifyRe
   if (!checkAuth(req, reply)) return
   await reply.send({ started: true })
   setImmediate(async () => {
-    if (!process.env.NOTION_TOKEN) {
-      console.log('Notion not configured — skipping refresh')
-      return
-    }
     const { writeFlaggedTransactions, writeRecentTransactions } = await import('../reports/notion.js')
     await Promise.all([
       writeFlaggedTransactions().catch(console.error),
@@ -116,10 +94,8 @@ export async function refreshNotionHandler(req: FastifyRequest, reply: FastifyRe
 export async function syncAllHandler(req: FastifyRequest, reply: FastifyReply) {
   if (!checkAuth(req, reply)) return
 
-  const items = await sql<Array<{ id: string; institution_name: string }>>`
-    SELECT id, institution_name FROM plaid_items
-  `
-  if (!items.length) return reply.send({ results: [] })
+  const { data: items } = await db.from('plaid_items').select('id, institution_name')
+  if (!items?.length) return reply.send({ results: [] })
 
   await reply.send({ started: items.map(i => i.institution_name) })
 
@@ -128,25 +104,6 @@ export async function syncAllHandler(req: FastifyRequest, reply: FastifyReply) {
       try {
         const stats = await syncTransactions(item.id)
         console.log(`Sync complete for ${item.institution_name}:`, stats)
-
-        if (stats.added + stats.modified > 0) {
-          const acctRows = await sql<Array<{ id: string }>>`
-            SELECT id FROM accounts WHERE plaid_item_id = ${item.id}
-          `
-          const accountIds = acctRows.map(a => a.id)
-          const recentTx = accountIds.length > 0
-            ? await sql<Array<any>>`
-                SELECT * FROM transactions
-                WHERE account_id = ANY(${accountIds})
-                ORDER BY created_at DESC
-                LIMIT ${stats.added + stats.modified}
-              `
-            : []
-
-          await runPaycheckCheckForTransactions(recentTx).catch(err =>
-            console.error(`Paycheck check failed for ${item.institution_name}:`, err)
-          )
-        }
       } catch (err) {
         console.error(`Sync failed for ${item.institution_name}:`, err)
       }
@@ -168,42 +125,36 @@ export async function linkExchangeHandler(req: FastifyRequest, reply: FastifyRep
   const exchangeResponse = await plaidClient.itemPublicTokenExchange({ public_token })
   const { access_token, item_id } = exchangeResponse.data
 
-  let item: { id: string }
-  try {
-    const [created] = await sql<Array<{ id: string }>>`
-      INSERT INTO plaid_items (plaid_item_id, access_token, institution_id, institution_name)
-      VALUES (${item_id}, ${access_token}, ${institution_id}, ${institution_name})
-      RETURNING id
-    `
-    item = created
-  } catch (e: any) {
-    return reply.code(500).send({ error: e.message })
-  }
+  const { data: item, error } = await db
+    .from('plaid_items')
+    .insert({ plaid_item_id: item_id, access_token, institution_id, institution_name })
+    .select()
+    .single()
+
+  if (error) return reply.code(500).send({ error: error.message })
 
   for (const acct of accounts) {
     // Skip if an account with the same mask + type already exists at this institution
     // (prevents duplicates when the same card appears under a second linked item)
     if (acct.mask) {
-      const existing = await sql<Array<{ id: string }>>`
-        SELECT id FROM accounts
-        WHERE mask = ${acct.mask}
-          AND type = ${acct.type}
-          AND plaid_account_id <> ${acct.id}
-        LIMIT 1
-      `
-      if (existing.length) continue
+      const { data: existing } = await db
+        .from('accounts')
+        .select('id')
+        .eq('mask', acct.mask)
+        .eq('type', acct.type)
+        .neq('plaid_account_id', acct.id)
+        .limit(1)
+      if (existing?.length) continue
     }
 
-    await sql`
-      INSERT INTO accounts (plaid_item_id, plaid_account_id, name, type, subtype, mask)
-      VALUES (${item.id}, ${acct.id}, ${acct.name}, ${acct.type}, ${acct.subtype}, ${acct.mask})
-      ON CONFLICT (plaid_account_id) DO UPDATE SET
-        plaid_item_id = EXCLUDED.plaid_item_id,
-        name = EXCLUDED.name,
-        type = EXCLUDED.type,
-        subtype = EXCLUDED.subtype,
-        mask = EXCLUDED.mask
-    `
+    await db.from('accounts').upsert({
+      plaid_item_id: item.id,
+      plaid_account_id: acct.id,
+      name: acct.name,
+      type: acct.type,
+      subtype: acct.subtype,
+      mask: acct.mask,
+    }, { onConflict: 'plaid_account_id' })
   }
 
   setImmediate(() => syncTransactions(item.id).catch(console.error))
@@ -214,17 +165,13 @@ export async function linkExchangeHandler(req: FastifyRequest, reply: FastifyRep
 export async function setupGetHandler(req: FastifyRequest, reply: FastifyReply) {
   if (!checkAuthPage(req, reply)) return
 
-  const [creditAccounts, existingAprs] = await Promise.all([
-    sql<Array<{ id: string; name: string; mask: string | null }>>`
-      SELECT id, name, mask FROM accounts WHERE type = 'credit'
-    `,
-    sql<Array<{ account_id: string; apr: number; credit_limit: number }>>`
-      SELECT account_id, apr, credit_limit FROM credit_accounts
-    `,
+  const [{ data: creditAccounts }, { data: existingAprs }] = await Promise.all([
+    db.from('accounts').select('id, name, mask').eq('type', 'credit'),
+    db.from('credit_accounts').select('account_id, apr, credit_limit'),
   ])
 
-  const aprMap = Object.fromEntries(existingAprs.map(r => [r.account_id, r]))
-  const accounts = creditAccounts.map(a => ({ ...a, ...aprMap[a.id] }))
+  const aprMap = Object.fromEntries((existingAprs ?? []).map(r => [r.account_id, r]))
+  const accounts = (creditAccounts ?? []).map(a => ({ ...a, ...aprMap[a.id] }))
 
   const html = readFileSync(join(__dirname, '../../public/setup.html'), 'utf8')
     .replace('__ACCOUNTS_JSON__', JSON.stringify(accounts))
@@ -256,85 +203,17 @@ export async function setupPostHandler(req: FastifyRequest, reply: FastifyReply)
     .filter(ca => !isNaN(ca.apr) && ca.apr > 0)
 
   for (const ca of creditAccounts) {
-    await sql`
-      INSERT INTO credit_accounts (account_id, apr, credit_limit)
-      VALUES (${ca.account_id}, ${ca.apr}, ${ca.credit_limit})
-      ON CONFLICT (account_id) DO UPDATE SET
-        apr = EXCLUDED.apr,
-        credit_limit = EXCLUDED.credit_limit
-    `
+    await db.from('credit_accounts').upsert(ca, { onConflict: 'account_id' })
   }
 
   if (body['target_type'] && body['target_value']) {
-    await sql`
-      INSERT INTO savings_goals (target_type, target_value)
-      VALUES (${body['target_type']}, ${parseFloat(body['target_value'])})
-    `
+    await db.from('savings_goals').insert({
+      target_type: body['target_type'],
+      target_value: parseFloat(body['target_value']),
+    })
   }
 
-  if (process.env.NOTION_TOKEN) await writeNotionHomepage().catch(() => {})
+  await writeNotionHomepage().catch(() => {})
 
   await reply.send({ ok: true, message: 'Setup complete' })
-}
-
-export async function itemStatusHandler(req: FastifyRequest, reply: FastifyReply) {
-  if (!checkAuth(req, reply)) return
-
-  const items = await sql<Array<{ id: string; plaid_item_id: string; access_token: string; institution_name: string }>>`
-    SELECT id, plaid_item_id, access_token, institution_name FROM plaid_items
-    ORDER BY created_at ASC
-  `
-
-  if (!items.length) return reply.send([])
-
-  const results = await Promise.all(items.map(async item => {
-    try {
-      const res = await plaidClient.itemGet({ access_token: item.access_token })
-      const error = res.data.item.error as { error_code: PlaidErrorCode } | null
-      const errorCode = error?.error_code ?? null
-      return {
-        id: item.id,
-        institution_name: item.institution_name,
-        healthy: errorCode === null,
-        error_code: errorCode,
-        needs_reauth: errorCode === 'ITEM_LOGIN_REQUIRED',
-      }
-    } catch (err: any) {
-      const errorCode: PlaidErrorCode = err?.response?.data?.error_code ?? 'UNKNOWN'
-      return {
-        id: item.id,
-        institution_name: item.institution_name,
-        healthy: false,
-        error_code: errorCode,
-        needs_reauth: errorCode === 'ITEM_LOGIN_REQUIRED',
-      }
-    }
-  }))
-
-  await reply.send(results)
-}
-
-export async function reauthTokenHandler(req: FastifyRequest, reply: FastifyReply) {
-  if (!checkAuth(req, reply)) return
-
-  const { item_id } = ((req.body as any)._parsed ?? req.body) as { item_id: string }
-  if (!item_id) return reply.code(400).send({ error: 'item_id required' })
-
-  const [item] = await sql<Array<{ access_token: string }>>`
-    SELECT access_token FROM plaid_items WHERE id = ${item_id} LIMIT 1
-  `
-
-  if (!item) return reply.code(404).send({ error: 'Item not found' })
-
-  const response = await plaidClient.linkTokenCreate({
-    user: { client_user_id: 'ro' },
-    client_name: 'GhostPaper',
-    country_codes: [CountryCode.Us],
-    language: 'en',
-    access_token: item.access_token,
-    webhook: process.env.PLAID_WEBHOOK_URL!,
-    ...(process.env.PLAID_REDIRECT_URI ? { redirect_uri: process.env.PLAID_REDIRECT_URI } : {}),
-  })
-
-  await reply.send({ link_token: response.data.link_token })
 }

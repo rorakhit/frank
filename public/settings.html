@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <link rel="icon" href="/public/icon.svg" type="image/svg+xml">
+  <title>AutoBudget — Settings</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { font-family: system-ui, sans-serif; max-width: 720px; margin: 40px auto; padding: 0 20px; color: #111; }
+    .back-link { display: inline-flex; align-items: center; gap: 4px; font-size: 0.78rem; color: #6b7280; text-decoration: none; margin-bottom: 20px; }
+    .back-link:hover { color: #111; }
+    h1 { font-size: 1.4rem; margin-bottom: 4px; }
+    .subtitle { color: #666; font-size: 0.9rem; margin-bottom: 36px; }
+    section { margin-bottom: 48px; }
+    h2 { font-size: 1.05rem; font-weight: 600; margin: 0 0 4px; }
+    .section-sub { color: #777; font-size: 0.85rem; margin: 0 0 20px; }
+
+    /* Account rename */
+    .rename-form { display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap; }
+    .form-group { display: flex; flex-direction: column; gap: 4px; }
+    .form-group label { font-size: 0.78rem; font-weight: 600; color: #555; text-transform: uppercase; letter-spacing: 0.04em; }
+    select, input[type="text"] { padding: 8px 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 0.9rem; background: white; }
+    select:focus, input:focus { outline: none; border-color: #6366f1; }
+    #account-select { min-width: 280px; }
+    #display-name { width: 200px; }
+    button.primary { padding: 8px 20px; background: #6366f1; color: white; border: none; border-radius: 6px; font-size: 0.9rem; cursor: pointer; white-space: nowrap; }
+    button.primary:hover { background: #4f46e5; }
+    button.primary:disabled { opacity: 0.4; cursor: default; }
+    .status-msg { font-size: 0.85rem; margin-top: 10px; min-height: 18px; }
+
+    /* Account cards (loans + credit cards) */
+    .acct-card { border: 1px solid #e5e7eb; border-radius: 8px; padding: 14px 16px; margin-bottom: 10px; max-width: 480px; }
+    .acct-card-name { font-weight: 600; font-size: 0.95rem; }
+    .acct-card-sub { color: #999; font-size: 0.8rem; margin-top: 2px; margin-bottom: 12px; }
+    .acct-card-fields { display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap; }
+    .acct-field { display: flex; flex-direction: column; gap: 3px; }
+    .acct-field label { font-size: 0.75rem; font-weight: 600; color: #555; text-transform: uppercase; letter-spacing: 0.04em; }
+    .acct-field label span { font-weight: 400; color: #aaa; text-transform: none; letter-spacing: 0; }
+    .acct-field input { width: 120px; padding: 6px 8px; border: 1px solid #ddd; border-radius: 6px; font-size: 0.9rem; }
+    .acct-field input:focus { outline: none; border-color: #6366f1; }
+    .acct-card-footer { display: flex; justify-content: flex-end; align-items: center; gap: 10px; margin-top: 12px; }
+    .save-acct-btn { padding: 7px 16px; background: #6366f1; color: white; border: none; border-radius: 6px; font-size: 0.85rem; cursor: pointer; white-space: nowrap; }
+    .save-acct-btn:hover { background: #4f46e5; }
+    .save-acct-btn:disabled { opacity: 0.4; cursor: default; }
+    .acct-status { font-size: 0.8rem; color: #16a34a; }
+
+    /* Categories */
+    .categories-grid { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 20px; }
+    .cat-chip {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 5px 12px; border-radius: 99px; font-size: 0.85rem;
+    }
+    .cat-chip.system { background: #f0f0f0; color: #444; }
+    .cat-chip.custom { background: #eef2ff; color: #4338ca; }
+    .cat-chip button {
+      background: none; border: none; cursor: pointer; padding: 0;
+      font-size: 0.9rem; color: #a5b4fc; line-height: 1;
+    }
+    .cat-chip button:hover { color: #dc2626; }
+    .add-category { display: flex; gap: 8px; align-items: center; }
+    #new-cat-input { width: 200px; }
+    #add-cat-btn { padding: 8px 16px; }
+  </style>
+</head>
+<body>
+  <a class="back-link" href="/">← Home</a>
+  <h1>AutoBudget — Settings</h1>
+  <p class="subtitle">Manage account names and transaction categories.</p>
+
+  <!-- Account Rename -->
+  <section>
+    <h2>Rename Account</h2>
+    <p class="section-sub">Chase and other banks often return generic names like "CREDIT CARD". Set a friendly name here.</p>
+    <div class="rename-form">
+      <div class="form-group">
+        <label>Account</label>
+        <select id="account-select"><option value="">Loading…</option></select>
+      </div>
+      <div class="form-group">
+        <label>New name</label>
+        <input type="text" id="display-name" placeholder="e.g. Chase Sapphire">
+      </div>
+      <button class="primary" id="rename-btn" disabled>Rename</button>
+    </div>
+    <div class="status-msg" id="rename-status"></div>
+  </section>
+
+  <!-- Loans -->
+  <section>
+    <h2>Loans</h2>
+    <p class="section-sub">APR and original balance are optional but improve yearly interest estimates and payoff projections. Balances are pulled automatically from Plaid.</p>
+    <div id="loan-section">Loading…</div>
+  </section>
+
+  <!-- Credit Card APRs -->
+  <section>
+    <h2>Credit Card APRs &amp; Limits</h2>
+    <p class="section-sub">Used for credit utilization alerts and the avalanche payoff plan in your dashboard.</p>
+    <div id="apr-section">Loading…</div>
+  </section>
+
+  <!-- Categories -->
+  <section>
+    <h2>Categories</h2>
+    <p class="section-sub">System categories (grey) are built-in. Custom categories (purple) can be deleted.</p>
+    <div class="categories-grid" id="categories-grid">Loading…</div>
+    <div class="add-category">
+      <input type="text" id="new-cat-input" placeholder="New category name…" maxlength="40">
+      <button class="primary" id="add-cat-btn">Add category</button>
+    </div>
+    <div class="status-msg" id="cat-status"></div>
+  </section>
+
+  <script>
+    let accounts = []
+    let systemCategories = []
+    let customCategories = []
+    let aprMap = {}
+    let loanMap = {}
+
+    const accountSelect = document.getElementById('account-select')
+    const displayNameInput = document.getElementById('display-name')
+    const renameBtn = document.getElementById('rename-btn')
+    const renameStatus = document.getElementById('rename-status')
+    const categoriesGrid = document.getElementById('categories-grid')
+    const newCatInput = document.getElementById('new-cat-input')
+    const addCatBtn = document.getElementById('add-cat-btn')
+    const catStatus = document.getElementById('cat-status')
+
+    function makeSaveHandler(container, url, getBody, onSuccess) {
+      container.querySelectorAll('.acct-card[data-account-id]').forEach(card => {
+        card.querySelector('.save-acct-btn').addEventListener('click', async () => {
+          const account_id = card.dataset.accountId
+          const btn = card.querySelector('.save-acct-btn')
+          const status = card.querySelector('.acct-status')
+          btn.disabled = true
+          status.textContent = 'Saving…'
+          try {
+            const body = getBody(card, account_id)
+            const res = await fetch(`${url}`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(body),
+            })
+            if (!res.ok) throw new Error((await res.json()).error)
+            onSuccess(account_id, body)
+            status.textContent = '✅ Saved'
+            setTimeout(() => { status.textContent = '' }, 2000)
+          } catch (err) {
+            status.textContent = `❌ ${err.message}`
+          }
+          btn.disabled = false
+        })
+      })
+    }
+
+    function renderLoanSection() {
+      const loanSection = document.getElementById('loan-section')
+      const loans = accounts.filter(a => a.type === 'loan')
+      if (!loans.length) {
+        loanSection.innerHTML = '<p style="color:#777;font-size:0.9rem">No loan accounts linked.</p>'
+        return
+      }
+      loanSection.innerHTML = loans.map(a => {
+        const existing = loanMap[a.id] || {}
+        return `<div class="acct-card" data-account-id="${a.id}">
+          <div class="acct-card-name">${a.name}${a.mask ? ' ···' + a.mask : ''}</div>
+          <div class="acct-card-sub">${a.subtype ? '(' + a.subtype + ')' : ''}</div>
+          <div class="acct-card-fields">
+            <div class="acct-field">
+              <label>APR (%) <span>(optional)</span></label>
+              <input type="number" class="loan-apr-input" step="0.01" min="0" max="100" placeholder="e.g. 5.50" value="${existing.apr ?? ''}">
+            </div>
+            <div class="acct-field">
+              <label>Original Balance ($) <span>(optional)</span></label>
+              <input type="number" class="loan-orig-input" step="1" min="0" placeholder="e.g. 30000" value="${existing.original_balance ?? ''}">
+            </div>
+          </div>
+          <div class="acct-card-footer">
+            <span class="acct-status"></span>
+            <button class="save-acct-btn">Save</button>
+          </div>
+        </div>`
+      }).join('')
+
+      makeSaveHandler(loanSection, '/settings/update-loan',
+        (card, account_id) => {
+          const body = { account_id }
+          const aprVal = card.querySelector('.loan-apr-input').value
+          const origVal = card.querySelector('.loan-orig-input').value
+          if (aprVal) body.apr = parseFloat(aprVal)
+          if (origVal) body.original_balance = parseFloat(origVal)
+          return body
+        },
+        (account_id, body) => { loanMap[account_id] = { apr: body.apr, original_balance: body.original_balance } }
+      )
+    }
+
+    function renderAprSection() {
+      const aprSection = document.getElementById('apr-section')
+      const creditCards = accounts.filter(a => a.type === 'credit')
+      if (!creditCards.length) {
+        aprSection.innerHTML = '<p style="color:#777;font-size:0.9rem">No credit accounts linked.</p>'
+        return
+      }
+      aprSection.innerHTML = creditCards.map(a => {
+        const existing = aprMap[a.id] || {}
+        return `<div class="acct-card" data-account-id="${a.id}">
+          <div class="acct-card-name">${a.name}${a.mask ? ' ···' + a.mask : ''}</div>
+          <div class="acct-card-sub">${(a.plaid_items?.institution_name) || ''}</div>
+          <div class="acct-card-fields">
+            <div class="acct-field">
+              <label>APR (%)</label>
+              <input type="number" class="apr-input" step="0.01" min="0" max="100" placeholder="e.g. 24.99" value="${existing.apr ?? ''}">
+            </div>
+            <div class="acct-field">
+              <label>Credit Limit ($)</label>
+              <input type="number" class="limit-input" step="1" min="0" placeholder="e.g. 5000" value="${existing.credit_limit ?? ''}">
+            </div>
+          </div>
+          <div class="acct-card-footer">
+            <span class="acct-status"></span>
+            <button class="save-acct-btn">Save</button>
+          </div>
+        </div>`
+      }).join('')
+
+      makeSaveHandler(aprSection, '/settings/update-apr',
+        (card, account_id) => ({
+          account_id,
+          apr: parseFloat(card.querySelector('.apr-input').value),
+          credit_limit: parseFloat(card.querySelector('.limit-input').value),
+        }),
+        (account_id, body) => { aprMap[account_id] = { apr: body.apr, credit_limit: body.credit_limit } }
+      )
+    }
+
+    function renderAccounts() {
+      accountSelect.innerHTML = '<option value="">Select account…</option>' +
+        accounts.map(a => {
+          const inst = a.plaid_items?.institution_name ?? ''
+          const label = `${a.name}${a.mask ? ' ···' + a.mask : ''}${inst ? ' — ' + inst : ''}`
+          return `<option value="${a.id}">${label}</option>`
+        }).join('')
+      renameBtn.disabled = false
+    }
+
+    function renderCategories() {
+      categoriesGrid.innerHTML = [
+        ...systemCategories.map(c => `<span class="cat-chip system">${c}</span>`),
+        ...customCategories.map(c =>
+          `<span class="cat-chip custom">${c}<button data-cat="${c}" title="Delete">×</button></span>`
+        ),
+      ].join('')
+    }
+
+    accountSelect.addEventListener('change', () => {
+      const acct = accounts.find(a => a.id === accountSelect.value)
+      if (acct) displayNameInput.value = acct.name
+    })
+
+    renameBtn.addEventListener('click', async () => {
+      const account_id = accountSelect.value
+      const display_name = displayNameInput.value.trim()
+      if (!account_id || !display_name) return
+      renameBtn.disabled = true
+      renameStatus.textContent = 'Saving…'
+      try {
+        const res = await fetch(`/settings/rename-account`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ account_id, display_name }),
+        })
+        if (!res.ok) throw new Error((await res.json()).error)
+        const acct = accounts.find(a => a.id === account_id)
+        if (acct) acct.name = display_name
+        renderAccounts()
+        accountSelect.value = account_id
+        renameStatus.textContent = '✅ Renamed successfully'
+        setTimeout(() => { renameStatus.textContent = '' }, 3000)
+      } catch (err) {
+        renameStatus.textContent = `❌ ${err.message}`
+      }
+      renameBtn.disabled = false
+    })
+
+    addCatBtn.addEventListener('click', async () => {
+      const name = newCatInput.value.trim()
+      if (!name) return
+      addCatBtn.disabled = true
+      catStatus.textContent = 'Adding…'
+      try {
+        const res = await fetch(`/settings/add-category`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name }),
+        })
+        if (!res.ok) throw new Error((await res.json()).error)
+        customCategories.push(name)
+        customCategories.sort()
+        newCatInput.value = ''
+        renderCategories()
+        catStatus.textContent = '✅ Category added'
+        setTimeout(() => { catStatus.textContent = '' }, 2000)
+      } catch (err) {
+        catStatus.textContent = `❌ ${err.message}`
+      }
+      addCatBtn.disabled = false
+    })
+
+    newCatInput.addEventListener('keydown', e => { if (e.key === 'Enter') addCatBtn.click() })
+
+    categoriesGrid.addEventListener('click', async e => {
+      if (!e.target.dataset.cat) return
+      const name = e.target.dataset.cat
+      if (!confirm(`Delete category "${name}"?`)) return
+      e.target.disabled = true
+      try {
+        const res = await fetch(`/settings/category/${encodeURIComponent(name)}`, { method: 'DELETE' })
+        if (!res.ok) throw new Error((await res.json()).error)
+        customCategories = customCategories.filter(c => c !== name)
+        renderCategories()
+      } catch (err) {
+        catStatus.textContent = `❌ ${err.message}`
+        e.target.disabled = false
+      }
+    })
+
+    fetch(`/settings/data`)
+      .then(r => r.json())
+      .then(data => {
+        accounts = data.accounts
+        systemCategories = data.systemCategories
+        customCategories = data.customCategories
+        aprMap = data.aprMap ?? {}
+        loanMap = data.loanMap ?? {}
+        renderLoanSection()
+        renderAprSection()
+        renderAccounts()
+        renderCategories()
+      })
+      .catch(() => { renameStatus.textContent = '❌ Failed to load settings.' })
+  </script>
+</body>
+</html>
