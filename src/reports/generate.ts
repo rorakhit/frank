@@ -293,10 +293,15 @@ export async function handlePaycheckDetected(tx: Transaction): Promise<void> {
     VALUES (${periodStart}, ${periodEnd}, 'biweekly', ${narrative}, ${keyFindings}::jsonb)
   `
 
-  await sql`
+  const inserted = await sql<Array<{ id: string }>>`
     INSERT INTO savings_events (paycheck_amount, period_start, period_end, notes)
     VALUES (${tx.amount}, ${periodStart}, ${periodEnd}, ${savingsRec})
+    ON CONFLICT (period_end) DO NOTHING
+    RETURNING id
   `
+
+  // Another process already handled this paycheck date — bail before sending email
+  if (!inserted.length) return
 
   if (agg.creditSummary.trend === 'growing') {
     const priorSnapshots = await sql<Array<{ account_id: string; balance: number; snapshot_at: string }>>`
