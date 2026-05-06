@@ -1,7 +1,7 @@
 import nodemailer from 'nodemailer'
 import type { AlertPayload } from '../types.js'
 
-const RECIPIENT = 'ro.rakhit@gmail.com'
+const RECIPIENT = process.env.GMAIL_RECIPIENT ?? process.env.GMAIL_USER ?? ''
 
 function createTransport() {
   return nodemailer.createTransport({

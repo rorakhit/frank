@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="/public/icon.png" type="image/png">
+  <title>GhostPaper — Reports</title>
+  <link rel="stylesheet" href="/public/style.css">
+  <style>
+    .report-list { display: flex; flex-direction: column; gap: 8px; }
+    .report-row {
+      background: var(--bg1); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 16px 20px;
+      cursor: pointer; transition: border-color 0.15s;
+      display: flex; align-items: center; justify-content: space-between; gap: 16px;
+    }
+    .report-row:hover { border-color: var(--border2); }
+    .report-row.open { border-color: var(--accent); }
+    .report-meta { display: flex; align-items: center; gap: 12px; flex: 1; min-width: 0; }
+    .report-period { font-size: 0.88rem; font-weight: 700; }
+    .report-stats { display: flex; gap: 16px; font-size: 0.78rem; color: var(--muted); }
+    .report-stat span { color: var(--text); font-weight: 600; }
+    .report-arrow { color: var(--muted); font-size: 0.8rem; transition: transform 0.2s; flex-shrink: 0; }
+    .report-row.open .report-arrow { transform: rotate(90deg); }
+
+    .report-body {
+      display: none; padding: 20px;
+      background: var(--bg); border: 1px solid var(--border);
+      border-top: none; border-radius: 0 0 var(--radius) var(--radius);
+      margin-top: -9px;
+    }
+    .report-body.open { display: block; }
+
+    .report-section { margin-bottom: 24px; }
+    .report-section:last-child { margin-bottom: 0; }
+    .report-section-header {
+      display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;
+    }
+    .report-section h3 {
+      font-size: 0.65rem; font-weight: 700; color: var(--muted);
+      text-transform: uppercase; letter-spacing: 0.1em; margin: 0;
+    }
+
+    .alloc-text { font-size: 0.88rem; line-height: 1.7; color: #bbb; white-space: pre-wrap; }
+
+    .cat-row { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+    .cat-name { font-size: 0.82rem; width: 140px; flex-shrink: 0; color: var(--muted); }
+    .cat-bar-wrap { flex: 1; }
+    .cat-bar { height: 5px; background: var(--accent); border-radius: 99px; opacity: 0.7; }
+    .cat-amt { font-size: 0.82rem; font-weight: 600; width: 80px; text-align: right; }
+
+    .filter-tabs { display: flex; gap: 4px; margin-bottom: 20px; }
+    .filter-tab {
+      padding: 5px 12px; border-radius: var(--radius-sm); font-size: 0.78rem;
+      font-weight: 600; cursor: pointer; border: 1px solid var(--border2);
+      background: transparent; color: var(--muted); transition: all 0.15s;
+    }
+    .filter-tab.active { background: var(--accent); color: #000; border-color: var(--accent); }
+
+    /* Copy for Claude button */
+    .copy-claude-btn {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 4px 10px; border-radius: var(--radius-sm); font-size: 0.72rem;
+      font-weight: 700; cursor: pointer; border: 1px solid rgba(200,255,0,0.3);
+      background: rgba(200,255,0,0.08); color: var(--accent);
+      transition: all 0.15s; white-space: nowrap;
+    }
+    .copy-claude-btn:hover { background: rgba(200,255,0,0.15); }
+    .copy-claude-btn.copied { background: rgba(0,230,118,0.1); border-color: rgba(0,230,118,0.3); color: var(--green); }
+
+    /* Goals section */
+    .goals-textarea {
+      width: 100%; min-height: 100px; padding: 10px 12px;
+      background: #111; border: 1px solid #2e2e2e; border-radius: 6px;
+      color: #f0f0f0; font-size: 0.85rem; line-height: 1.6; resize: vertical;
+      font-family: system-ui, sans-serif;
+    }
+    .goals-textarea:focus { outline: none; border-color: var(--accent); }
+    .goals-textarea::placeholder { color: #444; }
+    .goals-footer { display: flex; align-items: center; justify-content: space-between; margin-top: 8px; }
+    .goals-hint { font-size: 0.75rem; color: var(--muted); }
+    .goals-save-btn {
+      padding: 5px 14px; background: var(--accent); color: #000;
+      border: none; border-radius: 6px; font-size: 0.8rem; font-weight: 700;
+      cursor: pointer;
+    }
+    .goals-save-btn:hover { opacity: 0.85; }
+    .goals-save-btn:disabled { opacity: 0.4; cursor: default; }
+    .goals-status { font-size: 0.75rem; color: var(--green); }
+    .goals-has-content { border-color: rgba(200,255,0,0.25); }
+  </style>
+</head>
+<body>
+  <nav class="nav">
+    <a class="nav-brand" href="/"><img src="/public/icon.png" alt="GhostPaper"> GhostPaper</a>
+    <div class="nav-links">
+      <a class="nav-link active" href="/reports">Reports</a>
+      <a class="nav-link" href="/spending">Spending</a>
+      <a class="nav-link" href="/credit">Credit</a>
+      <a class="nav-link" href="/accounts">Config</a>
+    </div>
+    <div class="nav-right"></div>
+  </nav>
+
+  <div class="page">
+    <div class="page-title">
+      <h1>Reports</h1>
+      <p>Paycheck, monthly, and yearly financial reports</p>
+    </div>
+
+    <div class="filter-tabs">
+      <button class="filter-tab active" onclick="setFilter('all', this)">All</button>
+      <button class="filter-tab" onclick="setFilter('biweekly', this)">Paycheck</button>
+      <button class="filter-tab" onclick="setFilter('monthly', this)">Monthly</button>
+      <button class="filter-tab" onclick="setFilter('yearly', this)">Yearly</button>
+    </div>
+
+    <div class="report-list" id="report-list">
+      <div class="empty">Loading…</div>
+    </div>
+  </div>
+
+  <script>
+    const fmt = n => '$' + Math.abs(n).toLocaleString('en-US', { maximumFractionDigits: 0 })
+    const fmtFull = n => '$' + Math.abs(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+
+    let allReports = []
+    let currentFilter = 'all'
+
+    function setFilter(f, btn) {
+      currentFilter = f
+      document.querySelectorAll('.filter-tab').forEach(t => t.classList.remove('active'))
+      btn.classList.add('active')
+      render()
+    }
+
+    function typeLabel(t) {
+      return t === 'biweekly' ? 'Paycheck' : t === 'monthly' ? 'Monthly' : 'Yearly'
+    }
+    function typeBadgeClass(t) {
+      return t === 'biweekly' ? 'badge-accent' : t === 'monthly' ? 'badge-muted' : 'badge-green'
+    }
+
+    function buildClaudePrompt(r) {
+      const kf = r.key_findings ?? {}
+      const alloc = kf.paycheck_allocation ?? ''
+      const savRec = kf.savings_recommendation ?? ''
+      const cats = r.category_breakdown ? Object.entries(r.category_breakdown).sort((a,b) => b[1] - a[1]) : []
+
+      const lines = []
+      lines.push(`=== GhostPaper Financial Report ===`)
+      lines.push(`Period: ${r.period_start} → ${r.period_end} (${typeLabel(r.period_type)})`)
+      lines.push(``)
+
+      if (r.total_income) lines.push(`Income:       ${fmtFull(r.total_income)}`)
+      if (r.total_spend) lines.push(`Spend:        ${fmtFull(r.total_spend)}`)
+      if (r.savings_rate != null) lines.push(`Savings rate: ${r.savings_rate}%`)
+      lines.push(``)
+
+      if (cats.length) {
+        lines.push(`--- Spending by category ---`)
+        cats.forEach(([cat, amt]) => lines.push(`  ${cat.padEnd(22)} ${fmtFull(amt)}`))
+        lines.push(``)
+      }
+
+      if (r.raw_analysis) {
+        lines.push(`--- Analysis ---`)
+        lines.push(r.raw_analysis)
+        lines.push(``)
+      }
+
+      if (alloc) {
+        lines.push(`--- Paycheck allocation ---`)
+        lines.push(alloc)
+        lines.push(``)
+      }
+
+      if (savRec) {
+        lines.push(`--- Savings recommendation ---`)
+        lines.push(savRec)
+        lines.push(``)
+      }
+
+      if (r.goals) {
+        lines.push(`--- My current goals ---`)
+        lines.push(r.goals)
+        lines.push(``)
+      }
+
+      lines.push(`===`)
+      lines.push(``)
+      lines.push(`What do you need to know to help me create realistic goals for the next two weeks?`)
+
+      return lines.join('\n')
+    }
+
+    function render() {
+      const list = document.getElementById('report-list')
+      const filtered = currentFilter === 'all' ? allReports : allReports.filter(r => r.period_type === currentFilter)
+      if (!filtered.length) { list.innerHTML = '<div class="empty">No reports yet.</div>'; return }
+
+      list.innerHTML = filtered.map((r, i) => {
+        const kf = r.key_findings ?? {}
+        const alloc = kf.paycheck_allocation ?? ''
+        const savRec = kf.savings_recommendation ?? ''
+        const regenLabel = kf.label ?? ''
+        const cats = r.category_breakdown ? Object.entries(r.category_breakdown).sort((a,b)=>b[1]-a[1]).slice(0,6) : []
+        const maxCat = cats[0]?.[1] ?? 1
+        const hasGoals = !!(r.goals && r.goals.trim())
+
+        return `
+        <div>
+          <div class="report-row" onclick="toggleRow(${i})" id="row-${i}">
+            <div class="report-meta">
+              <span class="badge ${typeBadgeClass(r.period_type)}">${typeLabel(r.period_type)}</span>
+              ${regenLabel ? `<span style="font-size:0.7rem;padding:2px 7px;border-radius:99px;background:rgba(255,200,0,0.12);color:#b8960c;font-weight:700;border:1px solid rgba(255,200,0,0.25)">${regenLabel}</span>` : ''}
+              <span class="report-period">${r.period_start} → ${r.period_end}</span>
+              <div class="report-stats">
+                ${r.total_income ? `<span>Income <span>${fmt(r.total_income)}</span></span>` : ''}
+                ${r.total_spend ? `<span>Spend <span>${fmt(r.total_spend)}</span></span>` : ''}
+                ${r.savings_rate != null ? `<span>Saved <span>${r.savings_rate}%</span></span>` : ''}
+              </div>
+            </div>
+            <div style="display:flex;align-items:center;gap:10px">
+              ${hasGoals ? `<span style="font-size:0.7rem;color:var(--accent);font-weight:700">GOALS SET</span>` : ''}
+              <button onclick="deleteInsight(event,'${r.id}',${i})" style="padding:3px 9px;background:transparent;border:1px solid var(--border2);border-radius:5px;color:var(--muted);font-size:0.72rem;cursor:pointer" title="Delete this report">✕</button>
+              <span class="report-arrow">›</span>
+            </div>
+          </div>
+          <div class="report-body" id="body-${i}">
+            ${r.raw_analysis ? `
+              <div class="report-section">
+                <div class="report-section-header">
+                  <h3>Analysis</h3>
+                  <button class="copy-claude-btn" onclick="copyForClaude(event, ${i})">⬡ Copy for Claude</button>
+                </div>
+                <div class="narrative">${r.raw_analysis}</div>
+              </div>` : `
+              <div class="report-section">
+                <div class="report-section-header">
+                  <h3>Report</h3>
+                  <button class="copy-claude-btn" onclick="copyForClaude(event, ${i})">⬡ Copy for Claude</button>
+                </div>
+              </div>`}
+            ${cats.length ? `
+              <div class="report-section">
+                <h3>Spending by category</h3>
+                ${cats.map(([cat, amt]) => `
+                  <div class="cat-row">
+                    <span class="cat-name">${cat}</span>
+                    <div class="cat-bar-wrap"><div class="cat-bar" style="width:${Math.round((amt/maxCat)*100)}%"></div></div>
+                    <span class="cat-amt">${fmtFull(amt)}</span>
+                  </div>`).join('')}
+              </div>` : ''}
+            ${alloc ? `
+              <div class="report-section">
+                <h3>Paycheck allocation</h3>
+                <div class="alloc-text">${alloc}</div>
+              </div>` : ''}
+            ${savRec ? `
+              <div class="report-section">
+                <h3>Savings recommendation</h3>
+                <div class="alloc-text">${savRec}</div>
+              </div>` : ''}
+
+            <div class="report-section">
+              <div class="report-section-header">
+                <h3>Goals from Claude</h3>
+                <span class="goals-status" id="goals-status-${i}"></span>
+              </div>
+              <textarea
+                class="goals-textarea${hasGoals ? ' goals-has-content' : ''}"
+                id="goals-ta-${i}"
+                placeholder="Paste your goals here after chatting with Claude — e.g. keep dining under $200, put $300 into savings this period, pay down Chase Sapphire by $100 extra…"
+              >${r.goals ?? ''}</textarea>
+              <div class="goals-footer">
+                <span class="goals-hint">These goals will be included in your next paycheck allocation advice.</span>
+                <button class="goals-save-btn" onclick="saveGoals(event, ${i}, '${r.id}')">Save goals</button>
+              </div>
+            </div>
+          </div>
+        </div>`
+      }).join('')
+    }
+
+    async function deleteInsight(e, id, i) {
+      e.stopPropagation()
+      if (!confirm('Delete this report?')) return
+      const res = await fetch(`/reports/insight/${id}`, { method: 'DELETE' })
+      if (res.ok) await load()
+    }
+
+    function toggleRow(i) {
+      const row = document.getElementById(`row-${i}`)
+      const body = document.getElementById(`body-${i}`)
+      const isOpen = body.classList.contains('open')
+      row.classList.toggle('open', !isOpen)
+      body.classList.toggle('open', !isOpen)
+    }
+
+    async function copyForClaude(e, i) {
+      e.stopPropagation()
+      const r = (currentFilter === 'all' ? allReports : allReports.filter(r => r.period_type === currentFilter))[i]
+      const text = buildClaudePrompt(r)
+      await navigator.clipboard.writeText(text)
+      const btn = e.currentTarget
+      btn.textContent = '✓ Copied!'
+      btn.classList.add('copied')
+      setTimeout(() => { btn.textContent = '⬡ Copy for Claude'; btn.classList.remove('copied') }, 2000)
+    }
+
+    async function saveGoals(e, i, reportId) {
+      e.stopPropagation()
+      const ta = document.getElementById(`goals-ta-${i}`)
+      const statusEl = document.getElementById(`goals-status-${i}`)
+      const btn = e.currentTarget
+      const goals = ta.value.trim()
+      btn.disabled = true
+      statusEl.textContent = 'Saving…'
+      try {
+        const res = await fetch('/reports/save-goals', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id: reportId, goals: goals || null }),
+        })
+        if (!res.ok) throw new Error((await res.json()).error)
+        // Update local data
+        const filtered = currentFilter === 'all' ? allReports : allReports.filter(r => r.period_type === currentFilter)
+        filtered[i].goals = goals || null
+        const masterIdx = allReports.findIndex(r => r.id === reportId)
+        if (masterIdx >= 0) allReports[masterIdx].goals = goals || null
+        ta.classList.toggle('goals-has-content', !!goals)
+        statusEl.textContent = '✅ Saved'
+        setTimeout(() => { statusEl.textContent = '' }, 2000)
+      } catch (err) {
+        statusEl.textContent = `❌ ${err.message}`
+      }
+      btn.disabled = false
+    }
+
+    async function load() {
+      const res = await fetch('/reports/data')
+      if (res.status === 403) { location.href = '/'; return }
+      allReports = await res.json()
+      render()
+    }
+    load()
+  </script>
+</body>
+</html>

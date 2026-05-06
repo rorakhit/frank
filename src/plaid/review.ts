@@ -2,6 +2,7 @@ import { checkAuth, checkAuthPage } from '../auth.js'
 import type { FastifyRequest, FastifyReply } from 'fastify'
 import { db } from '../db/client.js'
 import { getAllCategories } from '../db/categories.js'
+import { CATEGORIES } from '../types.js'
 import { readFileSync } from 'fs'
 import { fileURLToPath } from 'url'
 import { dirname, join } from 'path'
@@ -64,7 +65,10 @@ export async function reviewTransactionsHandler(req: FastifyRequest, reply: Fast
   const result = Array.from(merchantMap.values())
     .sort((a, b) => a.minConfidence - b.minConfidence || b.count - a.count)
 
-  await reply.send({ merchants: result, categories: await getAllCategories() })
+  const { data: customData } = await db.from('custom_categories').select('name').order('name')
+  const customCategories = (customData ?? []).map(r => r.name as string)
+  const allCategories = [...CATEGORIES, ...customCategories]
+  await reply.send({ merchants: result, categories: allCategories, systemCategories: CATEGORIES, customCategories })
 }
 
 export async function reviewCorrectHandler(req: FastifyRequest, reply: FastifyReply) {
@@ -171,4 +175,39 @@ export async function confirmMerchantHandler(req: FastifyRequest, reply: Fastify
 
   if (error) return reply.code(500).send({ error: error.message })
   await reply.send({ ok: true, confirmed: count })
+}
+
+export async function toggleRecurringHandler(req: FastifyRequest, reply: FastifyReply) {
+  if (!checkAuth(req, reply)) return
+
+  const { plaid_transaction_id, is_recurring } =
+    ((req.body as any)._parsed ?? req.body) as { plaid_transaction_id: string; is_recurring: boolean }
+
+  if (!plaid_transaction_id || is_recurring === undefined) {
+    return reply.code(400).send({ error: 'plaid_transaction_id and is_recurring required' })
+  }
+
+  const { error } = await db
+    .from('transactions')
+    .update({ is_recurring: Boolean(is_recurring) })
+    .eq('plaid_transaction_id', plaid_transaction_id)
+
+  if (error) return reply.code(500).send({ error: error.message })
+  await reply.send({ ok: true })
+}
+
+export async function allTransactionsHandler(req: FastifyRequest, reply: FastifyReply) {
+  if (!checkAuth(req, reply)) return
+
+  const { data } = await db
+    .from('transactions')
+    .select('plaid_transaction_id, merchant_name, category, category_confidence, amount, date, is_recurring, flagged_for_review, raw_plaid_data')
+    .eq('is_income', false)
+    .order('date', { ascending: false })
+    .limit(500)
+
+  const { data: customData } = await db.from('custom_categories').select('name').order('name')
+  const customCategories = (customData ?? []).map(r => r.name as string)
+  const allCategories = [...CATEGORIES, ...customCategories]
+  await reply.send({ transactions: data ?? [], categories: allCategories })
 }

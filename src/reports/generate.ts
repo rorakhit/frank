@@ -2,6 +2,8 @@ import { anthropic } from '../categorize/claude.js'
 import { db } from '../db/client.js'
 import { getAggregatesForPeriod } from './aggregate.js'
 import { writeNotionReport, updateNotionDashboards } from './notion.js'
+
+const notionEnabled = () => !!process.env.NOTION_TOKEN
 import { sendEmail } from '../alerts/gmail.js'
 import type { PeriodAggregates, Transaction } from '../types.js'
 
@@ -217,6 +219,54 @@ Use exact dollar amounts. No preamble.`
   return message.content[0].type === 'text' ? message.content[0].text : ''
 }
 
+export async function generateNarrativeForRegen(
+  agg: PeriodAggregates,
+  originalNarrative: string | null,
+  transactions: Array<{ merchant_name: string | null; amount: number; date: string; category: string | null; is_income: boolean; is_recurring: boolean }>
+): Promise<string> {
+  const contextStr = formatAggregatesForPrompt(agg)
+
+  const txLines = transactions
+    .map(t => {
+      const flags = [t.is_income ? 'income' : null, t.is_recurring ? 'recurring' : null].filter(Boolean).join(', ')
+      return `  ${t.date}  ${(t.merchant_name ?? 'Unknown').padEnd(35)}  $${Number(t.amount).toFixed(2).padStart(8)}  ${t.category ?? 'Uncategorized'}${flags ? `  [${flags}]` : ''}`
+    })
+    .join('\n')
+
+  const txSection = transactions.length
+    ? `\nFull transaction list for this period:\n${txLines}`
+    : '\nNo transactions found for this period.'
+
+  const priorSection = originalNarrative
+    ? `\n\nOriginal report for this period (written when transactions were first synced):\n"""\n${originalNarrative}\n"""\n\nSome transactions may have been re-categorized, recurring flags updated, or new transactions synced since then.`
+    : ''
+
+  const prompt = `You are a personal finance advisor. This is a REGENERATED analysis of the same paycheck period, run after the user updated their transaction data (re-categorizations, recurring flag changes, etc.).${priorSection}
+
+Current aggregates:
+${contextStr}
+${txSection}
+
+Write a 3-5 paragraph plain-English analysis covering:
+1. Overall spending health — use the transaction list to call out specific merchants or patterns worth noting
+2. Notable category trends (good and bad) — if re-categorizations changed the picture from the original, call that out
+3. Credit health — utilization level, whether it's moving in the right direction, interest cost context
+4. 2-3 specific, actionable recommendations grounded in actual transactions
+
+Be direct and honest. Use exact dollar amounts. If the original report exists, briefly note what changed or was corrected. No preamble or sign-off.`
+
+  const message = await anthropic.messages.create({
+    model: 'claude-sonnet-4-6',
+    max_tokens: 1500,
+    messages: [{ role: 'user', content: prompt }],
+  })
+
+  return message.content[0].type === 'text' ? message.content[0].text : ''
+}
+
+export const getSavingsRecommendationForRegen = getSavingsRecommendation
+export const getPaycheckAllocationForRegen = getPaycheckAllocation
+
 export async function handlePaycheckDetected(tx: Transaction): Promise<void> {
   const { data: lastEvent } = await db
     .from('savings_events')
@@ -271,8 +321,8 @@ export async function handlePaycheckDetected(tx: Transaction): Promise<void> {
     notes: savingsRec,
   })
 
-  const notionPageUrl = await writeNotionReport(agg, narrative, 'biweekly')
-  await updateNotionDashboards(agg)
+  const notionPageUrl = notionEnabled() ? await writeNotionReport(agg, narrative, 'biweekly') : null
+  if (notionEnabled()) await updateNotionDashboards(agg)
 
   if (agg.creditSummary.trend === 'growing') {
     const { data: priorSnapshots } = await db
@@ -323,7 +373,7 @@ export async function handlePaycheckDetected(tx: Transaction): Promise<void> {
     `Savings recommendation:`,
     savingsRec,
     '',
-    `Full report: ${notionPageUrl}`,
+    ...(notionPageUrl ? [`Full report: ${notionPageUrl}`] : []),
   ].join('\n')
 
   await sendEmail(`Paycheck received: $${tx.amount.toFixed(2)}`, emailBody)
@@ -344,8 +394,10 @@ export async function runMonthlyReport(year: number, month: number): Promise<voi
     raw_analysis: narrative,
   })
 
-  await writeNotionReport(agg, narrative, 'monthly')
-  await updateNotionDashboards(agg)
+  if (notionEnabled()) {
+    await writeNotionReport(agg, narrative, 'monthly')
+    await updateNotionDashboards(agg)
+  }
 }
 
 export async function runYearlyReport(year: number): Promise<void> {
@@ -365,7 +417,7 @@ export async function runYearlyReport(year: number): Promise<void> {
     raw_analysis: narrative,
   })
 
-  const notionPageUrl = await writeNotionReport(agg, narrative, 'yearly')
+  const notionPageUrl = notionEnabled() ? await writeNotionReport(agg, narrative, 'yearly') : null
 
   const highlights = [
     `${year} Year in Review`,
@@ -375,8 +427,7 @@ export async function runYearlyReport(year: number): Promise<void> {
     `Net savings: $${agg.netSavings.toFixed(2)}`,
     `Average savings rate: ${agg.savingsRate}%`,
     `Total interest paid: $${agg.creditSummary.totalMonthlyInterest.toFixed(2)}/mo average`,
-    '',
-    `Full report: ${notionPageUrl}`,
+    ...(notionPageUrl ? ['', `Full report: ${notionPageUrl}`] : []),
     '',
     narrative.split('\n').slice(0, 6).join('\n'),
   ].join('\n')

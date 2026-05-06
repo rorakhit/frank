@@ -134,10 +134,12 @@ export async function syncTransactions(plaidItemId: string): Promise<{ added: nu
 
   await snapshotBalances(item.access_token)
 
-  await Promise.all([
-    writeFlaggedTransactions().catch(console.error),
-    writeRecentTransactions().catch(console.error),
-  ])
+  if (process.env.NOTION_TOKEN) {
+    await Promise.all([
+      writeFlaggedTransactions().catch(console.error),
+      writeRecentTransactions().catch(console.error),
+    ])
+  }
 
   return { added, modified, removed }
 }

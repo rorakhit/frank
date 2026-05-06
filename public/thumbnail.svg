@@ -1,0 +1,220 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="1200" height="630" viewBox="0 0 1200 630">
+  <defs>
+    <style>
+      @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&amp;display=swap');
+    </style>
+
+    <!-- Glow filters -->
+    <filter id="glow-green" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="12" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="glow-soft" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="6" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="icon-glow" x="-60%" y="-60%" width="220%" height="220%">
+      <feGaussianBlur stdDeviation="28" result="blur1"/>
+      <feGaussianBlur stdDeviation="14" result="blur2"/>
+      <feMerge>
+        <feMergeNode in="blur1"/>
+        <feMergeNode in="blur2"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <filter id="card-shadow">
+      <feDropShadow dx="0" dy="2" stdDeviation="6" flood-color="#000" flood-opacity="0.5"/>
+    </filter>
+
+    <!-- Vignette -->
+    <radialGradient id="vignette" cx="50%" cy="50%" r="70%">
+      <stop offset="0%" stop-color="transparent"/>
+      <stop offset="100%" stop-color="#000" stop-opacity="0.55"/>
+    </radialGradient>
+
+    <!-- Accent glow halo behind icon -->
+    <radialGradient id="halo" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#c8ff00" stop-opacity="0.18"/>
+      <stop offset="60%" stop-color="#c8ff00" stop-opacity="0.06"/>
+      <stop offset="100%" stop-color="#c8ff00" stop-opacity="0"/>
+    </radialGradient>
+
+    <!-- Bar chart gradient -->
+    <linearGradient id="bar-grad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#c8ff00" stop-opacity="0.9"/>
+      <stop offset="100%" stop-color="#c8ff00" stop-opacity="0.3"/>
+    </linearGradient>
+
+    <!-- Subtle grid line gradient -->
+    <linearGradient id="line-fade" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#2e2e2e" stop-opacity="0"/>
+      <stop offset="20%" stop-color="#2e2e2e" stop-opacity="1"/>
+      <stop offset="80%" stop-color="#2e2e2e" stop-opacity="1"/>
+      <stop offset="100%" stop-color="#2e2e2e" stop-opacity="0"/>
+    </linearGradient>
+
+    <clipPath id="icon-clip">
+      <rect x="0" y="0" width="160" height="160" rx="32" ry="32"/>
+    </clipPath>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1200" height="630" fill="#0a0a0a"/>
+
+  <!-- Subtle grid lines -->
+  <g opacity="0.35">
+    <line x1="0" y1="157" x2="1200" y2="157" stroke="url(#line-fade)" stroke-width="1"/>
+    <line x1="0" y1="315" x2="1200" y2="315" stroke="url(#line-fade)" stroke-width="1"/>
+    <line x1="0" y1="472" x2="1200" y2="472" stroke="url(#line-fade)" stroke-width="1"/>
+    <line x1="200" y1="0" x2="200" y2="630" stroke="#1a1a1a" stroke-width="1"/>
+    <line x1="400" y1="0" x2="400" y2="630" stroke="#1a1a1a" stroke-width="1"/>
+    <line x1="600" y1="0" x2="600" y2="630" stroke="#1a1a1a" stroke-width="1"/>
+    <line x1="800" y1="0" x2="800" y2="630" stroke="#1a1a1a" stroke-width="1"/>
+    <line x1="1000" y1="0" x2="1000" y2="630" stroke="#1a1a1a" stroke-width="1"/>
+  </g>
+
+  <!-- Nav bar -->
+  <rect width="1200" height="52" fill="#0f0f0f"/>
+  <line x1="0" y1="52" x2="1200" y2="52" stroke="#222" stroke-width="1"/>
+  <!-- Brand -->
+  <text x="32" y="33" font-family="Inter, system-ui, sans-serif" font-size="17" font-weight="800" fill="#f0f0f0" letter-spacing="-0.5">GhostPaper</text>
+  <!-- Nav links -->
+  <text x="760" y="33" font-family="Inter, system-ui, sans-serif" font-size="13" font-weight="500" fill="#888">Reports</text>
+  <text x="840" y="33" font-family="Inter, system-ui, sans-serif" font-size="13" font-weight="500" fill="#c8ff00">Spending</text>
+  <text x="928" y="33" font-family="Inter, system-ui, sans-serif" font-size="13" font-weight="500" fill="#888">Credit</text>
+  <text x="990" y="33" font-family="Inter, system-ui, sans-serif" font-size="13" font-weight="500" fill="#888">Config</text>
+
+  <!-- ── LEFT COLUMN — stat cards ── -->
+
+  <!-- Card 1: Total Spend -->
+  <rect x="32" y="80" width="240" height="100" rx="10" fill="#111" stroke="#222" stroke-width="1" filter="url(#card-shadow)"/>
+  <text x="52" y="106" font-family="Inter, system-ui, sans-serif" font-size="9" font-weight="700" fill="#555" letter-spacing="1.2" text-anchor="start">TOTAL SPEND</text>
+  <text x="52" y="138" font-family="Inter, system-ui, sans-serif" font-size="28" font-weight="800" fill="#f0f0f0" letter-spacing="-1">$3,842</text>
+  <text x="52" y="158" font-family="Inter, system-ui, sans-serif" font-size="10" fill="#555">↓ 8% vs prior period</text>
+  <!-- accent line -->
+  <rect x="32" y="80" width="3" height="100" rx="1.5" fill="#c8ff00" opacity="0.7"/>
+
+  <!-- Card 2: Savings Rate -->
+  <rect x="32" y="196" width="240" height="100" rx="10" fill="#111" stroke="#222" stroke-width="1" filter="url(#card-shadow)"/>
+  <text x="52" y="222" font-family="Inter, system-ui, sans-serif" font-size="9" font-weight="700" fill="#555" letter-spacing="1.2">SAVINGS RATE</text>
+  <text x="52" y="254" font-family="Inter, system-ui, sans-serif" font-size="28" font-weight="800" fill="#c8ff00" letter-spacing="-1">24%</text>
+  <text x="52" y="274" font-family="Inter, system-ui, sans-serif" font-size="10" fill="#555">↑ 3pts this period</text>
+  <rect x="32" y="196" width="3" height="100" rx="1.5" fill="#c8ff00" opacity="0.7"/>
+
+  <!-- Card 3: Credit Util -->
+  <rect x="32" y="312" width="240" height="100" rx="10" fill="#111" stroke="#222" stroke-width="1" filter="url(#card-shadow)"/>
+  <text x="52" y="338" font-family="Inter, system-ui, sans-serif" font-size="9" font-weight="700" fill="#555" letter-spacing="1.2">CREDIT UTIL</text>
+  <text x="52" y="370" font-family="Inter, system-ui, sans-serif" font-size="28" font-weight="800" fill="#f0f0f0" letter-spacing="-1">41%</text>
+  <!-- util bar -->
+  <rect x="52" y="378" width="190" height="5" rx="2.5" fill="#1a1a1a"/>
+  <rect x="52" y="378" width="78" height="5" rx="2.5" fill="#c8ff00" opacity="0.8"/>
+  <rect x="32" y="312" width="3" height="100" rx="1.5" fill="#c8ff00" opacity="0.7"/>
+
+  <!-- Card 4: Net Savings -->
+  <rect x="32" y="428" width="240" height="100" rx="10" fill="#111" stroke="#222" stroke-width="1" filter="url(#card-shadow)"/>
+  <text x="52" y="454" font-family="Inter, system-ui, sans-serif" font-size="9" font-weight="700" fill="#555" letter-spacing="1.2">NET SAVINGS</text>
+  <text x="52" y="486" font-family="Inter, system-ui, sans-serif" font-size="28" font-weight="800" fill="#f0f0f0" letter-spacing="-1">$1,204</text>
+  <text x="52" y="506" font-family="Inter, system-ui, sans-serif" font-size="10" fill="#555">this paycheck period</text>
+  <rect x="32" y="428" width="3" height="100" rx="1.5" fill="#c8ff00" opacity="0.7"/>
+
+  <!-- ── RIGHT COLUMN — bar chart ── -->
+  <rect x="296" y="80" width="380" height="460" rx="10" fill="#111" stroke="#222" stroke-width="1" filter="url(#card-shadow)"/>
+  <text x="316" y="108" font-family="Inter, system-ui, sans-serif" font-size="9" font-weight="700" fill="#555" letter-spacing="1.2">SPENDING BY CATEGORY</text>
+
+  <!-- Bars -->
+  <g>
+    <!-- Dining $820 -->
+    <text x="316" y="148" font-family="Inter, system-ui, sans-serif" font-size="11" fill="#888">Dining</text>
+    <rect x="316" y="152" width="290" height="12" rx="3" fill="#1a1a1a"/>
+    <rect x="316" y="152" width="290" height="12" rx="3" fill="url(#bar-grad)" opacity="0.9"/>
+    <text x="614" y="163" font-family="Inter, system-ui, sans-serif" font-size="10" font-weight="700" fill="#c8ff00" text-anchor="end">$820</text>
+
+    <!-- Groceries $640 -->
+    <text x="316" y="186" font-family="Inter, system-ui, sans-serif" font-size="11" fill="#888">Groceries</text>
+    <rect x="316" y="190" width="290" height="12" rx="3" fill="#1a1a1a"/>
+    <rect x="316" y="190" width="226" height="12" rx="3" fill="url(#bar-grad)" opacity="0.85"/>
+    <text x="614" y="201" font-family="Inter, system-ui, sans-serif" font-size="10" font-weight="700" fill="#f0f0f0" text-anchor="end">$640</text>
+
+    <!-- Subscriptions $410 -->
+    <text x="316" y="224" font-family="Inter, system-ui, sans-serif" font-size="11" fill="#888">Subscriptions</text>
+    <rect x="316" y="228" width="290" height="12" rx="3" fill="#1a1a1a"/>
+    <rect x="316" y="228" width="145" height="12" rx="3" fill="url(#bar-grad)" opacity="0.75"/>
+    <text x="614" y="239" font-family="Inter, system-ui, sans-serif" font-size="10" font-weight="700" fill="#f0f0f0" text-anchor="end">$410</text>
+
+    <!-- Transport $298 -->
+    <text x="316" y="262" font-family="Inter, system-ui, sans-serif" font-size="11" fill="#888">Transport</text>
+    <rect x="316" y="266" width="290" height="12" rx="3" fill="#1a1a1a"/>
+    <rect x="316" y="266" width="105" height="12" rx="3" fill="url(#bar-grad)" opacity="0.65"/>
+    <text x="614" y="277" font-family="Inter, system-ui, sans-serif" font-size="10" font-weight="700" fill="#f0f0f0" text-anchor="end">$298</text>
+
+    <!-- Shopping $244 -->
+    <text x="316" y="300" font-family="Inter, system-ui, sans-serif" font-size="11" fill="#888">Shopping</text>
+    <rect x="316" y="304" width="290" height="12" rx="3" fill="#1a1a1a"/>
+    <rect x="316" y="304" width="86" height="12" rx="3" fill="url(#bar-grad)" opacity="0.55"/>
+    <text x="614" y="315" font-family="Inter, system-ui, sans-serif" font-size="10" font-weight="700" fill="#f0f0f0" text-anchor="end">$244</text>
+
+    <!-- Entertainment $188 -->
+    <text x="316" y="338" font-family="Inter, system-ui, sans-serif" font-size="11" fill="#888">Entertainment</text>
+    <rect x="316" y="342" width="290" height="12" rx="3" fill="#1a1a1a"/>
+    <rect x="316" y="342" width="67" height="12" rx="3" fill="url(#bar-grad)" opacity="0.45"/>
+    <text x="614" y="353" font-family="Inter, system-ui, sans-serif" font-size="10" font-weight="700" fill="#f0f0f0" text-anchor="end">$188</text>
+
+    <!-- Dog $142 -->
+    <text x="316" y="376" font-family="Inter, system-ui, sans-serif" font-size="11" fill="#888">Dog</text>
+    <rect x="316" y="380" width="290" height="12" rx="3" fill="#1a1a1a"/>
+    <rect x="316" y="380" width="50" height="12" rx="3" fill="url(#bar-grad)" opacity="0.38"/>
+    <text x="614" y="391" font-family="Inter, system-ui, sans-serif" font-size="10" font-weight="700" fill="#f0f0f0" text-anchor="end">$142</text>
+
+    <!-- Other $100 -->
+    <text x="316" y="414" font-family="Inter, system-ui, sans-serif" font-size="11" fill="#888">Other</text>
+    <rect x="316" y="418" width="290" height="12" rx="3" fill="#1a1a1a"/>
+    <rect x="316" y="418" width="35" height="12" rx="3" fill="url(#bar-grad)" opacity="0.3"/>
+    <text x="614" y="429" font-family="Inter, system-ui, sans-serif" font-size="10" font-weight="700" fill="#f0f0f0" text-anchor="end">$100</text>
+  </g>
+
+  <!-- divider -->
+  <line x1="316" y1="460" x2="656" y2="460" stroke="#222" stroke-width="1"/>
+  <text x="316" y="478" font-family="Inter, system-ui, sans-serif" font-size="10" fill="#555">30-day period  ·  8 categories  ·  ↓ 8% vs prior</text>
+
+  <!-- ── CENTER — icon halo + icon ── -->
+  <!-- Large glow halo -->
+  <ellipse cx="940" cy="340" rx="220" ry="210" fill="url(#halo)"/>
+  <!-- Softer inner halo -->
+  <ellipse cx="940" cy="340" rx="130" ry="125" fill="#c8ff00" opacity="0.04"/>
+
+  <!-- Faint dashboard card silhouettes behind icon -->
+  <rect x="700" y="100" width="180" height="90" rx="8" fill="#111" stroke="#222" stroke-width="1" opacity="0.5"/>
+  <rect x="700" y="205" width="180" height="90" rx="8" fill="#111" stroke="#222" stroke-width="1" opacity="0.4"/>
+  <rect x="700" y="310" width="180" height="90" rx="8" fill="#111" stroke="#222" stroke-width="1" opacity="0.3"/>
+  <rect x="1000" y="100" width="168" height="90" rx="8" fill="#111" stroke="#222" stroke-width="1" opacity="0.5"/>
+  <rect x="1000" y="205" width="168" height="90" rx="8" fill="#111" stroke="#222" stroke-width="1" opacity="0.4"/>
+  <rect x="1000" y="310" width="168" height="90" rx="8" fill="#111" stroke="#222" stroke-width="1" opacity="0.3"/>
+
+  <!-- Faint shimmer lines in silhouette cards -->
+  <rect x="716" y="118" width="90" height="6" rx="3" fill="#1e1e1e" opacity="0.8"/>
+  <rect x="716" y="148" width="140" height="18" rx="3" fill="#1e1e1e" opacity="0.8"/>
+  <rect x="716" y="223" width="90" height="6" rx="3" fill="#1e1e1e" opacity="0.8"/>
+  <rect x="716" y="248" width="140" height="18" rx="3" fill="#c8ff00" opacity="0.12"/>
+  <rect x="1016" y="118" width="90" height="6" rx="3" fill="#1e1e1e" opacity="0.8"/>
+  <rect x="1016" y="148" width="120" height="18" rx="3" fill="#1e1e1e" opacity="0.8"/>
+  <rect x="1016" y="223" width="90" height="6" rx="3" fill="#1e1e1e" opacity="0.8"/>
+  <rect x="1016" y="248" width="120" height="18" rx="3" fill="#1e1e1e" opacity="0.8"/>
+
+  <!-- Icon — centered at 940,340 -->
+  <g transform="translate(860, 260)" filter="url(#icon-glow)">
+    <image href="icon.png" width="160" height="160" clip-path="url(#icon-clip)"/>
+  </g>
+
+  <!-- App name below icon -->
+  <text x="940" y="454" font-family="Inter, system-ui, sans-serif" font-size="22" font-weight="800" fill="#f0f0f0" text-anchor="middle" letter-spacing="-0.8">GhostPaper</text>
+  <text x="940" y="476" font-family="Inter, system-ui, sans-serif" font-size="12" font-weight="500" fill="#555" text-anchor="middle" letter-spacing="0.5">personal finance · automated</text>
+
+  <!-- Accent dot separator -->
+  <circle cx="940" cy="498" r="2.5" fill="#c8ff00" opacity="0.7"/>
+
+  <!-- Vignette overlay -->
+  <rect width="1200" height="630" fill="url(#vignette)"/>
+
+  <!-- Border -->
+  <rect width="1200" height="630" fill="none" stroke="#222" stroke-width="1"/>
+</svg>

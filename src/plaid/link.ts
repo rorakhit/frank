@@ -13,7 +13,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url))
 
 async function createLinkToken() {
   const response = await plaidClient.linkTokenCreate({
-    user: { client_user_id: 'ro' },
+    user: { client_user_id: 'user' },
     client_name: 'AutoBudget',
     products: [Products.Transactions],
     country_codes: [CountryCode.Us],
@@ -26,9 +26,7 @@ async function createLinkToken() {
 
 export async function linkHandler(req: FastifyRequest, reply: FastifyReply) {
   if (!checkAuthPage(req, reply)) return
-  const token = await createLinkToken()
   const html = readFileSync(join(__dirname, '../../public/link.html'), 'utf8')
-    .replace('__LINK_TOKEN__', token)
   await reply.type('text/html').send(html)
 }
 
@@ -82,6 +80,10 @@ export async function refreshNotionHandler(req: FastifyRequest, reply: FastifyRe
   if (!checkAuth(req, reply)) return
   await reply.send({ started: true })
   setImmediate(async () => {
+    if (!process.env.NOTION_TOKEN) {
+      console.log('Notion not configured — skipping refresh')
+      return
+    }
     const { writeFlaggedTransactions, writeRecentTransactions } = await import('../reports/notion.js')
     await Promise.all([
       writeFlaggedTransactions().catch(console.error),
@@ -213,7 +215,7 @@ export async function setupPostHandler(req: FastifyRequest, reply: FastifyReply)
     })
   }
 
-  await writeNotionHomepage().catch(() => {})
+  if (process.env.NOTION_TOKEN) await writeNotionHomepage().catch(() => {})
 
   await reply.send({ ok: true, message: 'Setup complete' })
 }

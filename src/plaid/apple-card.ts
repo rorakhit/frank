@@ -165,3 +165,20 @@ export async function appleCardImportHandler(req: FastifyRequest, reply: Fastify
 
   await reply.send({ imported, skipped, errors })
 }
+
+export async function appleCardBalanceHandler(req: FastifyRequest, reply: FastifyReply) {
+  if (!checkAuth(req, reply)) return
+
+  const { balance } = ((req.body as any)._parsed ?? req.body) as { balance: number }
+  if (balance === undefined || isNaN(Number(balance))) {
+    return reply.code(400).send({ error: 'balance required' })
+  }
+
+  const accountId = await ensureAppleCardAccount()
+  const { error } = await db.from('balance_snapshots').insert({
+    account_id: accountId,
+    balance: Math.max(0, Number(balance)),
+  })
+  if (error) return reply.code(500).send({ error: error.message })
+  await reply.send({ ok: true })
+}
