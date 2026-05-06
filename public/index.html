@@ -7,7 +7,7 @@
   <title>GhostPaper</title>
   <link rel="stylesheet" href="/public/style.css">
   <style>
-    .hero { padding: 48px 0 32px; }
+    .hero { padding: 20px 0 24px; }
     .hero h1 { font-size: 2.4rem; }
     .hero h1 span { color: var(--accent); }
     .hero p { color: var(--muted); margin-top: 8px; font-size: 0.95rem; }
@@ -34,7 +34,6 @@
     .nc-bar-track { flex: 1; height: 4px; background: var(--bg2); border-radius: 99px; overflow: hidden; min-width: 40px; }
     .nc-bar-fill { height: 100%; border-radius: 99px; background: var(--accent); opacity: 0.8; }
     .nc-util-bar-track { height: 5px; background: var(--bg2); border-radius: 99px; overflow: hidden; margin-top: 2px; }
-    .nc-badge {
     .nc-badge {
       display: inline-block; margin-top: 6px;
       background: rgba(255,77,77,0.15); color: var(--red);
@@ -64,7 +63,7 @@
       <a class="nav-link" href="/credit">Credit</a>
       <a class="nav-link" href="/accounts">Config</a>
     </div>
-    <div class="nav-right">
+    <div class="nav-right" style="display:flex;align-items:center;gap:6px">
       <button class="btn btn-ghost btn-sm sync-btn" id="sync-btn" onclick="syncAll()" style="display:none">
         <span id="sync-icon">↻</span> Sync
       </button>
