@@ -2,196 +2,261 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <link rel="icon" href="/public/icon.svg" type="image/svg+xml">
-  <title>AutoBudget</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="/public/icon.png" type="image/png">
+  <title>GhostPaper</title>
+  <link rel="stylesheet" href="/public/style.css">
   <style>
-    * { box-sizing: border-box; }
-    body { font-family: system-ui, sans-serif; max-width: 820px; margin: 40px auto; padding: 0 20px; color: #111; }
+    .hero { padding: 48px 0 32px; }
+    .hero h1 { font-size: 2.4rem; }
+    .hero h1 span { color: var(--accent); }
+    .hero p { color: var(--muted); margin-top: 8px; font-size: 0.95rem; }
 
-    /* Header */
-    .header { display: flex; align-items: flex-end; justify-content: space-between; margin-bottom: 18px; }
-    .header-left h1 { font-size: 1.5rem; font-weight: 800; letter-spacing: -0.03em; margin: 0 0 2px; }
-    .header-left .subtitle { font-size: 0.78rem; color: #9ca3af; margin: 0; }
-    .auth-badge { display: flex; align-items: center; gap: 5px; background: #f3f4f6; border-radius: 20px; padding: 4px 12px; font-size: 0.75rem; color: #6b7280; cursor: pointer; border: 1px solid #e5e7eb; text-decoration: none; }
-    .auth-badge:hover { background: #e5e7eb; }
-    .auth-dot { width: 7px; height: 7px; border-radius: 50%; background: #d1d5db; flex-shrink: 0; }
-    .auth-dot.authed { background: #16a34a; }
-    .header-actions { display: flex; align-items: center; gap: 8px; }
-    .sync-btn { display: none; align-items: center; gap: 5px; background: #f3f4f6; border: 1px solid #e5e7eb; border-radius: 20px; padding: 4px 12px; font-size: 0.75rem; color: #6b7280; cursor: pointer; }
-    .sync-btn:hover { background: #e5e7eb; }
-    .sync-btn.visible { display: flex; }
-    .sync-btn.syncing { opacity: 0.6; cursor: default; }
+    .stats-band { margin: 24px 0; }
+
+    .nav-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+    @media (max-width: 640px) { .nav-grid { grid-template-columns: repeat(2, 1fr); } }
+    .nc {
+      display: block; text-decoration: none; color: var(--text);
+      background: var(--bg1); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 20px 18px;
+      transition: border-color 0.15s, background 0.15s;
+    }
+    .nc:hover { border-color: var(--accent); background: var(--bg2); }
+    .nc-card-header { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 10px; }
+    .nc-title { font-size: 0.82rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
+    .nc-sub { font-size: 0.68rem; color: var(--muted); }
+    .nc-body { display: flex; flex-direction: column; gap: 5px; }
+    .nc-stat { font-size: 1.1rem; font-weight: 700; }
+    .nc-row { display: flex; align-items: center; justify-content: space-between; font-size: 0.78rem; gap: 8px; }
+    .nc-row-label { color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .nc-row-val { font-weight: 700; flex-shrink: 0; }
+    .nc-bar-track { flex: 1; height: 4px; background: var(--bg2); border-radius: 99px; overflow: hidden; min-width: 40px; }
+    .nc-bar-fill { height: 100%; border-radius: 99px; background: var(--accent); opacity: 0.8; }
+    .nc-util-bar-track { height: 5px; background: var(--bg2); border-radius: 99px; overflow: hidden; margin-top: 2px; }
+    .nc-badge {
+    .nc-badge {
+      display: inline-block; margin-top: 6px;
+      background: rgba(255,77,77,0.15); color: var(--red);
+      font-size: 0.65rem; font-weight: 700; border-radius: 99px; padding: 2px 7px;
+    }
+
+    .locked-overlay {
+      filter: blur(6px); opacity: 0.2; pointer-events: none;
+      user-select: none; transition: filter 0.4s, opacity 0.4s;
+    }
+    .locked-overlay.unlocked { filter: none; opacity: 1; pointer-events: auto; }
+
+    .sync-btn { }
     @keyframes spin { to { transform: rotate(360deg); } }
-    .sync-icon { display: inline-block; }
-    .sync-btn.syncing .sync-icon { animation: spin 0.8s linear infinite; }
-
-    /* Stats band */
-    .stats-band {
-      display: flex;
-      background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
-      border-radius: 12px; overflow: hidden; margin-bottom: 20px;
-      transition: filter 0.4s ease, opacity 0.4s ease;
-    }
-    .stats-band.locked { filter: blur(4px); opacity: 0.30; pointer-events: none; }
-    .stat {
-      flex: 1; display: flex; flex-direction: column;
-      padding: 16px 18px; border-right: 1px solid rgba(255,255,255,0.12);
-    }
-    .stat:last-child { border-right: none; }
-    .stat .s-label { font-size: 0.62rem; color: rgba(255,255,255,0.55); text-transform: uppercase; letter-spacing: 0.07em; margin-bottom: 6px; }
-    .stat .s-value { font-size: 1.05rem; font-weight: 700; color: white; line-height: 1; }
-    .stat .s-sub { font-size: 0.68rem; color: rgba(255,255,255,0.5); margin-top: 4px; }
-    .s-value.alert { color: #fca5a5; }
-    .s-value.positive { color: #86efac; }
-    .s-value.negative { color: #fca5a5; }
-
-    /* Login prompt */
-    #login-prompt {
-      background: #f8f9fa; border: 1px solid #e5e7eb; border-radius: 10px;
-      padding: 16px 20px; margin-bottom: 20px;
-    }
-    #login-prompt p { margin: 0 0 10px; font-size: 0.88rem; font-weight: 600; color: #374151; }
-    .login-row { display: flex; gap: 8px; }
-    .login-row input {
-      flex: 1; padding: 8px 12px; border: 1px solid #ddd; border-radius: 6px;
-      font-size: 0.9rem; font-family: monospace;
-    }
-    .login-row input:focus { outline: none; border-color: #6366f1; }
-    button.primary { padding: 8px 18px; background: #6366f1; color: white; border: none; border-radius: 6px; font-size: 0.9rem; cursor: pointer; white-space: nowrap; }
-    button.primary:hover { background: #4f46e5; }
-    button.primary:disabled { opacity: 0.4; cursor: default; }
-    .login-error { font-size: 0.8rem; color: #dc2626; margin-top: 6px; min-height: 16px; }
-
-    /* Nav grid */
-    #nav-grid { display: none; grid-template-columns: repeat(3, 1fr); gap: 12px; }
-    #nav-grid.visible { display: grid; }
-    @media (max-width: 520px) { #nav-grid { grid-template-columns: 1fr 1fr; } }
-    .nav-card {
-      display: block; text-decoration: none; color: inherit;
-      border: 1px solid #e5e7eb; border-radius: 10px; padding: 16px 18px;
-      transition: border-color 0.15s, box-shadow 0.15s;
-    }
-    .nav-card:hover { border-color: #6366f1; box-shadow: 0 2px 8px rgba(99,102,241,0.1); }
-    .nav-card .card-icon { font-size: 1.3rem; margin-bottom: 8px; }
-    .nav-card .card-title { font-size: 0.88rem; font-weight: 700; margin-bottom: 3px; }
-    .nav-card .card-desc { font-size: 0.75rem; color: #9ca3af; line-height: 1.4; }
-    .card-badge {
-      display: inline-block; margin-top: 7px;
-      background: #fee2e2; color: #dc2626;
-      font-size: 0.65rem; font-weight: 700; border-radius: 10px; padding: 2px 7px;
-    }
+    .spinning { display: inline-block; animation: spin 0.7s linear infinite; }
   </style>
 </head>
 <body>
-  <div class="header">
-    <div class="header-left">
-      <h1>AutoBudget</h1>
-      <p class="subtitle">Personal Finance Automation</p>
+  <nav class="nav">
+    <a class="nav-brand" href="/">
+      <img src="/public/icon.png" alt="GhostPaper">
+      GhostPaper
+    </a>
+    <div class="nav-links">
+      <a class="nav-link" href="/reports">Reports</a>
+      <a class="nav-link" href="/spending">Spending</a>
+      <a class="nav-link" href="/credit">Credit</a>
+      <a class="nav-link" href="/accounts">Config</a>
     </div>
-    <div class="header-actions">
-      <button class="sync-btn" id="sync-btn" onclick="syncAll()">
-        <span class="sync-icon">↻</span> Sync
+    <div class="nav-right">
+      <button class="btn btn-ghost btn-sm sync-btn" id="sync-btn" onclick="syncAll()" style="display:none">
+        <span id="sync-icon">↻</span> Sync
       </button>
-      <a class="auth-badge" id="auth-badge" href="#" onclick="handleAuthBadge(event)">
-        <span class="auth-dot" id="auth-dot"></span>
-        <span id="auth-label">not authenticated</span>
-      </a>
+      <button class="btn btn-ghost btn-sm" id="auth-btn" onclick="handleAuth()">Sign in</button>
     </div>
-  </div>
+  </nav>
 
-  <div class="stats-band locked" id="stats-band">
-    <div class="stat"><span class="s-label">Net worth</span><span class="s-value" id="s-networth">—</span><span class="s-sub" id="s-networth-delta">—</span></div>
-    <div class="stat"><span class="s-label">CC balance</span><span class="s-value" id="s-cc">—</span><span class="s-sub" id="s-cc-sub">—</span></div>
-    <div class="stat"><span class="s-label">Total debt</span><span class="s-value" id="s-debt">—</span><span class="s-sub">mortgage + loans</span></div>
-    <div class="stat"><span class="s-label">Savings / mo</span><span class="s-value" id="s-savings">—</span><span class="s-sub">last 30 days</span></div>
-    <div class="stat"><span class="s-label">To review</span><span class="s-value" id="s-review">—</span><span class="s-sub">transactions</span></div>
-  </div>
-
-  <div id="login-prompt">
-    <p>Enter your setup secret to continue</p>
-    <div class="login-row">
-      <input type="password" id="secret-input" placeholder="Setup secret…" autocomplete="off">
-      <button class="primary" id="unlock-btn" onclick="login()">Unlock</button>
+  <div class="page">
+    <div class="hero">
+      <h1>Your money,<br><span>under control.</span></h1>
+      <p>Personal finance automation. Zero effort.</p>
     </div>
-    <div class="login-error" id="login-error"></div>
-  </div>
 
-  <div id="nav-grid">
-    <a class="nav-card" href="/link" id="nc-link">
-      <div class="card-icon">🔗</div>
-      <div class="card-title">Link Accounts</div>
-      <div class="card-desc">Connect bank accounts via Plaid</div>
-    </a>
-    <a class="nav-card" href="/review" id="nc-review">
-      <div class="card-icon">🔍</div>
-      <div class="card-title">Review</div>
-      <div class="card-desc">Categorize flagged transactions</div>
-    </a>
-    <a class="nav-card" href="/settings" id="nc-settings">
-      <div class="card-icon">⚙️</div>
-      <div class="card-title">Settings</div>
-      <div class="card-desc">APRs, limits, account names, categories</div>
-    </a>
-    <a class="nav-card" href="/paycheck" id="nc-paycheck">
-      <div class="card-icon">💸</div>
-      <div class="card-title">Paycheck</div>
-      <div class="card-desc">Configure allocation setup</div>
-    </a>
-    <a class="nav-card" href="/rules" id="nc-rules">
-      <div class="card-icon">📋</div>
-      <div class="card-title">Rules</div>
-      <div class="card-desc">Auto-categorization rules</div>
-    </a>
-    <a class="nav-card" href="/apple-card" id="nc-apple">
-      <div class="card-icon">🍎</div>
-      <div class="card-title">Apple Card</div>
-      <div class="card-desc">Import CSV transactions</div>
-    </a>
+    <div id="login-wrap">
+      <div class="login-box">
+        <h2>Welcome back</h2>
+        <p>Enter your setup secret to access your dashboard.</p>
+        <div class="form-group">
+          <input type="password" id="secret-input" placeholder="Setup secret…" autocomplete="off">
+        </div>
+        <div style="margin-top:10px">
+          <button class="btn btn-primary" id="unlock-btn" onclick="login()" style="width:100%">Unlock</button>
+        </div>
+        <div class="login-error" id="login-error"></div>
+      </div>
+    </div>
+
+    <div id="dashboard" style="display:none">
+      <div class="stat-grid stat-grid-5 stats-band locked-overlay" id="stats-band">
+        <div class="stat-cell">
+          <span class="stat-label">Net worth</span>
+          <span class="stat-value mono" id="s-networth">—</span>
+          <span class="stat-sub" id="s-networth-delta">—</span>
+        </div>
+        <div class="stat-cell">
+          <span class="stat-label">CC balance</span>
+          <span class="stat-value mono" id="s-cc">—</span>
+          <span class="stat-sub" id="s-cc-sub">—</span>
+        </div>
+        <div class="stat-cell">
+          <span class="stat-label">Total debt</span>
+          <span class="stat-value mono" id="s-debt">—</span>
+          <span class="stat-sub">excl. mortgage</span>
+        </div>
+        <div class="stat-cell">
+          <span class="stat-label">Saved / mo</span>
+          <span class="stat-value mono" id="s-savings">—</span>
+          <span class="stat-sub">last 30 days</span>
+        </div>
+        <div class="stat-cell">
+          <span class="stat-label">To review</span>
+          <span class="stat-value mono" id="s-review">—</span>
+          <span class="stat-sub">transactions</span>
+        </div>
+      </div>
+
+      <div class="nav-grid" id="nav-grid">
+        <a class="nc" href="/reports">
+          <div class="nc-card-header">
+            <span class="nc-title">Reports</span>
+          </div>
+          <div id="nc-reports" class="nc-body">—</div>
+        </a>
+        <a class="nc" href="/spending">
+          <div class="nc-card-header">
+            <span class="nc-title">Spending</span>
+            <span class="nc-sub" id="nc-spending-period"></span>
+          </div>
+          <div id="nc-spending" class="nc-body">—</div>
+        </a>
+        <a class="nc" href="/credit">
+          <div class="nc-card-header">
+            <span class="nc-title">Credit</span>
+          </div>
+          <div id="nc-credit" class="nc-body">—</div>
+        </a>
+        <a class="nc" href="/accounts" id="nc-accounts">
+          <div class="nc-card-header">
+            <span class="nc-title">Config</span>
+          </div>
+          <div id="nc-health" class="nc-body" style="display:flex;flex-direction:column;gap:4px"></div>
+        </a>
+      </div>
+    </div>
   </div>
 
   <script>
-    function fmt(n) { return '$' + Math.abs(n).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 }) }
+    const fmt = n => '$' + Math.abs(n).toLocaleString('en-US', { maximumFractionDigits: 0 })
 
     function showDashboard(stats) {
-      document.getElementById('s-networth').textContent = (stats.netWorth < 0 ? '-' : '') + fmt(stats.netWorth)
+      document.getElementById('login-wrap').style.display = 'none'
+      document.getElementById('dashboard').style.display = 'block'
+      document.getElementById('sync-btn').style.display = 'flex'
+      document.getElementById('auth-btn').textContent = 'Sign out'
+
+      const nw = stats.netWorth
+      document.getElementById('s-networth').textContent = (nw < 0 ? '-' : '') + fmt(nw)
+      document.getElementById('s-networth').className = 'stat-value mono ' + (nw >= 0 ? 'green' : 'red')
+
       const delta = stats.netWorthDelta
-      const deltaEl = document.getElementById('s-networth-delta')
-      const networthEl = document.getElementById('s-networth')
       if (delta !== 0) {
-        deltaEl.textContent = (delta >= 0 ? '↑ ' : '↓ ') + fmt(delta) + ' this mo'
-        networthEl.classList.toggle('positive', delta >= 0)
-        networthEl.classList.toggle('negative', delta < 0)
+        document.getElementById('s-networth-delta').textContent = (delta >= 0 ? '↑ ' : '↓ ') + fmt(delta) + ' this mo'
       } else {
-        deltaEl.textContent = '—'
+        document.getElementById('s-networth-delta').textContent = 'no change'
       }
+
       document.getElementById('s-cc').textContent = fmt(stats.ccBalance)
-      document.getElementById('s-cc-sub').textContent = `across ${stats.ccCardCount} card${stats.ccCardCount !== 1 ? 's' : ''}`
+      document.getElementById('s-cc-sub').textContent = `${stats.ccCardCount} card${stats.ccCardCount !== 1 ? 's' : ''}`
+
       document.getElementById('s-debt').textContent = fmt(stats.totalDebt)
-      const savingsEl = document.getElementById('s-savings')
-      savingsEl.textContent = (stats.savingsThisMonth >= 0 ? '' : '-') + fmt(stats.savingsThisMonth)
-      savingsEl.classList.toggle('positive', stats.savingsThisMonth >= 0)
-      savingsEl.classList.toggle('negative', stats.savingsThisMonth < 0)
-      const reviewEl = document.getElementById('s-review')
-      reviewEl.textContent = stats.pendingReviews
-      reviewEl.classList.toggle('alert', stats.pendingReviews > 0)
 
-      // Badge on review card
-      const reviewCard = document.getElementById('nc-review')
-      if (stats.pendingReviews > 0) {
-        if (!reviewCard.querySelector('.card-badge')) {
-          const badge = document.createElement('div')
-          badge.className = 'card-badge'
-          badge.textContent = `${stats.pendingReviews} pending`
-          reviewCard.appendChild(badge)
-        }
-      }
+      const sav = stats.savingsThisMonth
+      document.getElementById('s-savings').textContent = (sav < 0 ? '-' : '') + fmt(sav)
+      document.getElementById('s-savings').className = 'stat-value mono ' + (sav >= 0 ? 'green' : 'red')
 
-      document.getElementById('stats-band').classList.remove('locked')
-      document.getElementById('login-prompt').style.display = 'none'
-      document.getElementById('nav-grid').classList.add('visible')
-      document.getElementById('auth-dot').classList.add('authed')
-      document.getElementById('auth-label').textContent = 'authenticated · sign out'
-      document.getElementById('sync-btn').classList.add('visible')
+      const rev = stats.pendingReviews
+      document.getElementById('s-review').textContent = rev
+      document.getElementById('s-review').className = 'stat-value mono ' + (rev > 0 ? 'orange' : '')
+
+      document.getElementById('stats-band').classList.add('unlocked')
+      loadCards()
+    }
+
+    async function loadCards() {
+      const [reportsData, spendingData, creditData, healthData] = await Promise.all([
+        fetch('/reports/data').then(r => r.ok ? r.json() : []),
+        fetch('/spending/data?days=30').then(r => r.ok ? r.json() : null),
+        fetch('/credit/data').then(r => r.ok ? r.json() : null),
+        fetch('/link/status').then(r => r.ok ? r.json() : []),
+      ])
+      renderReportsCard(reportsData)
+      renderSpendingCard(spendingData)
+      renderCreditCard(creditData)
+      renderHealthCard(healthData)
+    }
+
+    function renderReportsCard(reports) {
+      const el = document.getElementById('nc-reports')
+      const latest = reports?.[0]
+      if (!latest) { el.innerHTML = '<span style="font-size:0.78rem;color:var(--muted)">No reports yet</span>'; return }
+      const typeLabel = latest.period_type === 'biweekly' ? 'Paycheck' : latest.period_type === 'monthly' ? 'Monthly' : 'Yearly'
+      const typeColor = latest.period_type === 'biweekly' ? 'var(--accent)' : latest.period_type === 'monthly' ? 'var(--muted)' : 'var(--green)'
+      el.innerHTML = `
+        <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
+          <span style="font-size:0.68rem;font-weight:700;color:${typeColor};text-transform:uppercase;letter-spacing:0.06em">${typeLabel}</span>
+          <span style="font-size:0.68rem;color:var(--muted)">${latest.period_start} → ${latest.period_end}</span>
+        </div>
+        ${latest.savings_rate != null ? `<div class="nc-row"><span class="nc-row-label">Savings rate</span><span class="nc-row-val" style="color:${latest.savings_rate >= 10 ? 'var(--green)' : 'var(--muted)'}">${latest.savings_rate}%</span></div>` : ''}
+        ${latest.total_spend ? `<div class="nc-row"><span class="nc-row-label">Spend</span><span class="nc-row-val">${fmt(latest.total_spend)}</span></div>` : ''}
+        ${latest.total_income ? `<div class="nc-row"><span class="nc-row-label">Income</span><span class="nc-row-val">${fmt(latest.total_income)}</span></div>` : ''}`
+    }
+
+    function renderSpendingCard(data) {
+      const el = document.getElementById('nc-spending')
+      if (!data?.categoryBreakdown) { el.innerHTML = '<span style="font-size:0.78rem;color:var(--muted)">No data</span>'; return }
+      document.getElementById('nc-spending-period').textContent = '30 days'
+      const cats = Object.entries(data.categoryBreakdown).sort((a,b) => b[1]-a[1]).slice(0, 4)
+      const max = cats[0]?.[1] ?? 1
+      el.innerHTML = cats.map(([cat, amt]) => `
+        <div class="nc-row">
+          <span class="nc-row-label">${cat}</span>
+          <div class="nc-bar-track"><div class="nc-bar-fill" style="width:${Math.round(amt/max*100)}%"></div></div>
+          <span class="nc-row-val">${fmt(amt)}</span>
+        </div>`).join('')
+    }
+
+    function renderCreditCard(data) {
+      const el = document.getElementById('nc-credit')
+      const cc = data?.creditSummary
+      if (!cc) { el.innerHTML = '<span style="font-size:0.78rem;color:var(--muted)">No data</span>'; return }
+      const utilColor = cc.totalUtilization >= 50 ? 'var(--red)' : cc.totalUtilization >= 30 ? 'orange' : 'var(--green)'
+      const trendLabel = cc.trend === 'growing' ? '↑ Growing' : cc.trend === 'shrinking' ? '↓ Shrinking' : cc.trend === 'stable' ? '→ Stable' : ''
+      const trendColor = cc.trend === 'growing' ? 'var(--red)' : cc.trend === 'shrinking' ? 'var(--green)' : 'var(--muted)'
+      el.innerHTML = `
+        <div class="nc-row" style="margin-bottom:2px">
+          <span class="nc-row-label">Utilization</span>
+          <span class="nc-row-val" style="color:${utilColor}">${cc.totalUtilization}%</span>
+        </div>
+        <div class="nc-util-bar-track"><div style="height:100%;border-radius:99px;background:${utilColor};width:${Math.min(cc.totalUtilization,100)}%;transition:width 0.3s"></div></div>
+        <div class="nc-row" style="margin-top:2px"><span class="nc-row-label">Interest / mo</span><span class="nc-row-val" style="color:var(--red)">${fmt(cc.totalMonthlyInterest)}</span></div>
+        ${trendLabel ? `<div class="nc-row"><span class="nc-row-label">Trend</span><span class="nc-row-val" style="color:${trendColor};font-size:0.72rem">${trendLabel}</span></div>` : ''}`
+    }
+
+    function renderHealthCard(items) {
+      const el = document.getElementById('nc-health')
+      if (!items?.length) { el.innerHTML = '<span style="font-size:0.75rem;color:var(--muted)">No accounts linked</span>'; return }
+      el.innerHTML = items.map(item => `
+        <div style="display:flex;align-items:center;gap:6px;font-size:0.75rem">
+          <span style="width:7px;height:7px;border-radius:50%;background:${item.healthy ? 'var(--green)' : 'var(--red)'};flex-shrink:0;display:inline-block"></span>
+          <span style="color:var(--text);font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1">${item.institution_name}</span>
+          ${!item.healthy ? `<span style="color:var(--red);font-size:0.7rem;flex-shrink:0">needs reauth</span>` : ''}
+        </div>`).join('')
     }
 
     async function login() {
@@ -201,60 +266,45 @@
       btn.disabled = true
       try {
         const res = await fetch('/auth', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ secret }),
         })
-        if (res.status === 403) {
-          document.getElementById('login-error').textContent = 'Incorrect secret.'
-          return
-        }
-        if (!res.ok) {
-          document.getElementById('login-error').textContent = 'Server error, please try again.'
-          return
-        }
-        document.getElementById('login-error').textContent = ''
-        sessionStorage.setItem('ab_authed', '1')
+        if (res.status === 403) { document.getElementById('login-error').textContent = 'Incorrect secret.'; return }
+        if (!res.ok) { document.getElementById('login-error').textContent = 'Server error.'; return }
+        sessionStorage.setItem('gp_authed', '1')
         const stats = await fetch('/home/stats').then(r => r.json())
         showDashboard(stats)
-      } catch {
-        document.getElementById('login-error').textContent = 'Network error, please try again.'
-      } finally {
-        btn.disabled = false
-      }
+      } catch { document.getElementById('login-error').textContent = 'Network error.' }
+      finally { btn.disabled = false }
     }
 
-    async function syncAll() {
-      const btn = document.getElementById('sync-btn')
-      if (btn.classList.contains('syncing')) return
-      btn.classList.add('syncing')
-      try {
-        await fetch('/link/sync-all', { method: 'POST' })
-        const stats = await fetch('/home/stats').then(r => r.json())
-        showDashboard(stats)
-      } finally {
-        btn.classList.remove('syncing')
-      }
-    }
-
-    async function handleAuthBadge(e) {
-      if (!sessionStorage.getItem('ab_authed')) return
-      e.preventDefault()
-      sessionStorage.removeItem('ab_authed')
+    async function handleAuth() {
+      if (!sessionStorage.getItem('gp_authed')) return
+      sessionStorage.removeItem('gp_authed')
       await fetch('/auth/logout')
       location.reload()
     }
 
-    document.getElementById('secret-input').addEventListener('keydown', e => {
-      if (e.key === 'Enter') login()
-    })
+    async function syncAll() {
+      const btn = document.getElementById('sync-btn')
+      const icon = document.getElementById('sync-icon')
+      if (btn.disabled) return
+      btn.disabled = true
+      icon.className = 'spinning'
+      try {
+        await fetch('/link/sync-all', { method: 'POST' })
+        const stats = await fetch('/home/stats').then(r => r.json())
+        showDashboard(stats)
+      } finally { btn.disabled = false; icon.className = '' }
+    }
+
+    document.getElementById('secret-input').addEventListener('keydown', e => { if (e.key === 'Enter') login() })
 
     async function init() {
-      if (!sessionStorage.getItem('ab_authed')) return
+      if (!sessionStorage.getItem('gp_authed')) return
       const res = await fetch('/home/stats')
-      if (res.status === 403) { sessionStorage.removeItem('ab_authed'); return }
-      const stats = await res.json()
-      showDashboard(stats)
+      if (res.status === 403) { sessionStorage.removeItem('gp_authed'); return }
+      showDashboard(await res.json())
     }
     init()
   </script>

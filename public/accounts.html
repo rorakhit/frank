@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="/public/icon.png" type="image/png">
+  <title>GhostPaper — Config</title>
+  <link rel="stylesheet" href="/public/style.css">
+  <style>
+    /* Tabs */
+    .tab-bar { display: flex; gap: 4px; margin-bottom: 28px; border-bottom: 1px solid var(--border); padding-bottom: 0; }
+    .tab-btn {
+      padding: 8px 18px; font-size: 0.85rem; font-weight: 600; cursor: pointer;
+      border: none; background: transparent; color: var(--muted);
+      border-bottom: 2px solid transparent; margin-bottom: -1px; transition: all 0.15s;
+    }
+    .tab-btn:hover { color: var(--text); }
+    .tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
+    .tab-panel { display: none; }
+    .tab-panel.active { display: block; }
+
+    /* Rules & Categories */
+    .form-card { background: var(--bg1); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px; margin-bottom: 28px; }
+    .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 16px; }
+    .form-group { display: flex; flex-direction: column; gap: 4px; }
+    .form-group.full { grid-column: 1 / -1; }
+    .form-label { font-size: 0.72rem; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; }
+    .form-input { padding: 8px 10px; background: var(--bg); border: 1px solid var(--border2); border-radius: 6px; color: var(--text); font-size: 0.85rem; }
+    .form-input:focus { outline: none; border-color: var(--accent); }
+    .form-hint { font-size: 0.72rem; color: var(--muted); }
+    .amount-row { display: flex; gap: 6px; }
+    .submit-btn { padding: 8px 20px; background: var(--accent); color: #000; border: none; border-radius: 6px; font-size: 0.85rem; font-weight: 700; cursor: pointer; }
+    .submit-btn:hover { opacity: 0.85; }
+    .rules-list { display: flex; flex-direction: column; gap: 10px; }
+    .rule-card { display: flex; align-items: flex-start; gap: 12px; padding: 12px 14px; background: var(--bg1); border: 1px solid var(--border); border-radius: var(--radius-sm); }
+    .rule-label { font-size: 0.88rem; font-weight: 600; margin-bottom: 4px; }
+    .rule-conditions { display: flex; flex-wrap: wrap; gap: 6px; }
+    .chip { display: inline-block; padding: 2px 8px; border-radius: 99px; font-size: 0.72rem; background: var(--bg2); color: var(--muted); border: 1px solid var(--border); }
+    .chip.category { background: rgba(200,255,0,0.1); color: var(--accent); border-color: rgba(200,255,0,0.3); }
+    .delete-btn { padding: 4px 10px; background: transparent; border: 1px solid var(--border2); border-radius: 4px; color: var(--muted); font-size: 0.75rem; cursor: pointer; flex-shrink: 0; }
+    .delete-btn:hover { border-color: #ef4444; color: #ef4444; }
+    .cat-grid { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
+    .cat-chip { display: inline-flex; align-items: center; gap: 4px; padding: 4px 12px; border-radius: 99px; font-size: 0.78rem; font-weight: 600; background: var(--bg2); border: 1px solid var(--border); color: var(--muted); }
+    .cat-chip.custom { background: rgba(200,255,0,0.08); border-color: rgba(200,255,0,0.25); color: var(--accent); }
+    .cat-chip-del { background: transparent; border: none; color: inherit; cursor: pointer; font-size: 0.9rem; padding: 0; line-height: 1; opacity: 0.6; }
+    .cat-chip-del:hover { opacity: 1; }
+    .cat-add-row { display: flex; gap: 8px; align-items: center; }
+    .cat-add-input { padding: 7px 12px; background: var(--bg1); border: 1px solid var(--border2); border-radius: 6px; color: var(--text); font-size: 0.85rem; width: 220px; }
+    .cat-add-input:focus { outline: none; border-color: var(--accent); }
+    .primary-btn { padding: 8px 18px; background: var(--accent); color: #000; border: none; border-radius: 6px; font-size: 0.85rem; font-weight: 700; cursor: pointer; }
+    .primary-btn:hover { opacity: 0.85; }
+    .primary-btn:disabled { opacity: 0.4; cursor: default; }
+    .status-sm { font-size: 0.75rem; color: var(--green); }
+
+    /* Settings */
+    .settings-section { margin-bottom: 32px; }
+    .settings-section-title { font-size: 0.72rem; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 12px; }
+    .rename-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    .acct-select { padding: 7px 10px; background: var(--bg1); border: 1px solid var(--border2); border-radius: 6px; color: var(--text); font-size: 0.85rem; min-width: 180px; }
+    .rename-input { padding: 7px 12px; background: var(--bg1); border: 1px solid var(--border2); border-radius: 6px; color: var(--text); font-size: 0.85rem; width: 200px; }
+    .rename-input:focus, .acct-select:focus { outline: none; border-color: var(--accent); }
+    .inst-card { display: flex; align-items: center; justify-content: space-between; gap: 12px; border: 1px solid var(--border); border-radius: 8px; padding: 12px 16px; margin-bottom: 10px; max-width: 480px; }
+    .inst-card.error { border-color: #fca5a5; background: #fff8f8; }
+    .inst-name { font-weight: 600; font-size: 0.95rem; }
+    .inst-badge { display: inline-block; padding: 2px 10px; border-radius: 99px; font-size: 0.78rem; font-weight: 600; margin-top: 4px; }
+    .inst-badge.healthy { background: #dcfce7; color: #15803d; }
+    .inst-badge.error { background: #fee2e2; color: #b91c1c; }
+    .reauth-btn { padding: 6px 14px; background: #f59e0b; color: white; border: none; border-radius: 6px; font-size: 0.82rem; cursor: pointer; white-space: nowrap; }
+    .reauth-btn:hover { background: #d97706; }
+    .reauth-btn:disabled { opacity: 0.4; cursor: default; }
+  </style>
+</head>
+<body>
+  <nav class="nav">
+    <a class="nav-brand" href="/"><img src="/public/icon.png" alt="GhostPaper"> GhostPaper</a>
+    <div class="nav-links">
+      <a class="nav-link" href="/reports">Reports</a>
+      <a class="nav-link" href="/spending">Spending</a>
+      <a class="nav-link" href="/credit">Credit</a>
+      <a class="nav-link active" href="/accounts">Config</a>
+    </div>
+    <div class="nav-right"></div>
+  </nav>
+
+  <div class="page">
+    <div class="page-title">
+      <h1>Config</h1>
+      <p>Rules, categories, and account settings</p>
+    </div>
+
+    <div class="tab-bar">
+      <button class="tab-btn active" onclick="switchTab('rules', this)">Rules &amp; Categories</button>
+      <button class="tab-btn" onclick="switchTab('settings', this)">Settings</button>
+    </div>
+
+    <!-- ── RULES & CATEGORIES ── -->
+    <div class="tab-panel active" id="tab-rules">
+      <div class="form-card">
+        <div class="section-header" style="margin-bottom:16px"><span class="section-title">Add rule</span></div>
+        <form id="rule-form">
+          <div class="form-grid">
+            <div class="form-group full">
+              <span class="form-label">Label</span>
+              <input class="form-input" type="text" name="label" placeholder="e.g. Venmo utilities payment" required>
+            </div>
+            <div class="form-group">
+              <span class="form-label">Name contains</span>
+              <input class="form-input" type="text" name="match_name_contains" placeholder="e.g. Venmo">
+              <span class="form-hint">Case-insensitive match on raw transaction name</span>
+            </div>
+            <div class="form-group">
+              <span class="form-label">Day of week</span>
+              <select class="form-input" name="match_day_of_week">
+                <option value="">Any day</option>
+                <option value="0">Sunday</option><option value="1">Monday</option>
+                <option value="2">Tuesday</option><option value="3">Wednesday</option>
+                <option value="4">Thursday</option><option value="5">Friday</option>
+                <option value="6">Saturday</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <span class="form-label">Amount range ($)</span>
+              <div class="amount-row">
+                <input class="form-input" type="number" name="match_amount_min" placeholder="Min" min="0" step="0.01">
+                <input class="form-input" type="number" name="match_amount_max" placeholder="Max" min="0" step="0.01">
+              </div>
+              <span class="form-hint">Leave blank for no limit</span>
+            </div>
+            <div class="form-group">
+              <span class="form-label">Category</span>
+              <select class="form-input" name="category" id="cat-select" required></select>
+            </div>
+            <div class="form-group">
+              <span class="form-label">Priority</span>
+              <input class="form-input" type="number" name="priority" value="0" min="0">
+              <span class="form-hint">Higher wins when multiple rules match</span>
+            </div>
+          </div>
+          <button class="submit-btn" type="submit">Add rule</button>
+          <div id="rule-status" style="font-size:0.82rem;color:var(--muted);margin-top:10px;min-height:18px"></div>
+        </form>
+      </div>
+
+      <div class="section-header" style="margin-bottom:12px"><span class="section-title">Active rules</span></div>
+      <div class="rules-list" id="rules-list"><div class="empty">Loading…</div></div>
+
+      <div class="section-header" style="margin-top:32px;margin-bottom:12px"><span class="section-title">Categories</span></div>
+      <div class="cat-grid" id="cat-grid"></div>
+      <div class="cat-add-row">
+        <input class="cat-add-input" id="cat-input" type="text" placeholder="New category name" maxlength="40">
+        <button class="primary-btn" onclick="addCategory()">Add</button>
+        <span class="status-sm" id="cat-status"></span>
+      </div>
+    </div>
+
+    <!-- ── SETTINGS ── -->
+    <div class="tab-panel" id="tab-settings">
+      <div class="settings-section">
+        <div class="settings-section-title">Connected institutions</div>
+        <div id="inst-list"><div class="empty">Loading…</div></div>
+      </div>
+
+      <div class="settings-section">
+        <div class="settings-section-title">Rename account</div>
+        <div class="rename-row">
+          <select class="acct-select" id="acct-select"></select>
+          <input class="rename-input" type="text" id="rename-input" placeholder="New name">
+          <button class="primary-btn" onclick="renameAccount()">Rename</button>
+          <span class="status-sm" id="rename-status"></span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.plaid.com/link/v2/stable/link-initialize.js"></script>
+  <script>
+    const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+    let rulesLoaded = false, settingsLoaded = false
+    let systemCats = [], customCats = []
+
+    function switchTab(name, btn) {
+      document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'))
+      document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'))
+      btn.classList.add('active')
+      document.getElementById('tab-' + name).classList.add('active')
+      if (name === 'rules' && !rulesLoaded) loadRules()
+      if (name === 'settings' && !settingsLoaded) loadSettings()
+    }
+
+    // ── RULES & CATEGORIES ────────────────────────────────────────────────────
+
+    async function loadRules() {
+      rulesLoaded = true
+      const [rulesRes, settingsRes] = await Promise.all([
+        fetch('/rules/list'),
+        fetch('/settings/data'),
+      ])
+      const rulesData = await rulesRes.json()
+      const settingsData = await settingsRes.json()
+
+      systemCats = settingsData.systemCategories
+      customCats = settingsData.customCategories
+
+      document.getElementById('cat-select').innerHTML = rulesData.categories.map(c => `<option value="${c}">${c}</option>`).join('')
+      renderRules(rulesData.rules)
+      renderCategories()
+    }
+
+    function renderRules(rules) {
+      const el = document.getElementById('rules-list')
+      if (!rules.length) { el.innerHTML = '<div class="empty">No rules yet. Add one above.</div>'; return }
+      el.innerHTML = rules.map(r => {
+        const chips = []
+        if (r.match_name_contains) chips.push(`name contains "${r.match_name_contains}"`)
+        if (r.match_amount_min !== null && r.match_amount_max !== null) chips.push(`$${r.match_amount_min}–$${r.match_amount_max}`)
+        else if (r.match_amount_min !== null) chips.push(`≥ $${r.match_amount_min}`)
+        else if (r.match_amount_max !== null) chips.push(`≤ $${r.match_amount_max}`)
+        if (r.match_day_of_week !== null) chips.push(`every ${DAYS[r.match_day_of_week]}`)
+        if (r.priority > 0) chips.push(`priority ${r.priority}`)
+        return `<div class="rule-card">
+          <div style="flex:1">
+            <div class="rule-label">${r.label}</div>
+            <div class="rule-conditions">
+              ${chips.map(c => `<span class="chip">${c}</span>`).join('')}
+              <span class="chip category">→ ${r.category}</span>
+            </div>
+          </div>
+          <button class="delete-btn" data-id="${r.id}">Delete</button>
+        </div>`
+      }).join('')
+    }
+
+    document.getElementById('rules-list').addEventListener('click', async e => {
+      if (!e.target.classList.contains('delete-btn')) return
+      const id = e.target.dataset.id
+      if (!confirm('Delete this rule?')) return
+      const res = await fetch(`/rules/${id}`, { method: 'DELETE' })
+      if (res.ok) loadRules()
+    })
+
+    document.getElementById('rule-form').addEventListener('submit', async e => {
+      e.preventDefault()
+      const fd = new FormData(e.target)
+      const body = {
+        label: fd.get('label'),
+        category: fd.get('category'),
+        match_name_contains: fd.get('match_name_contains') || undefined,
+        match_amount_min: fd.get('match_amount_min') ? Number(fd.get('match_amount_min')) : undefined,
+        match_amount_max: fd.get('match_amount_max') ? Number(fd.get('match_amount_max')) : undefined,
+        match_day_of_week: fd.get('match_day_of_week') !== '' ? Number(fd.get('match_day_of_week')) : undefined,
+        priority: Number(fd.get('priority') ?? 0),
+      }
+      const statusEl = document.getElementById('rule-status')
+      statusEl.textContent = 'Saving…'
+      const res = await fetch('/rules/create', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+      if (res.ok) { e.target.reset(); statusEl.textContent = '✓ Rule added'; setTimeout(() => { statusEl.textContent = '' }, 2000); loadRules() }
+      else { statusEl.textContent = '✗ ' + (await res.json()).error }
+    })
+
+    function renderCategories() {
+      const grid = document.getElementById('cat-grid')
+      const sysHtml = systemCats.map(c => `<span class="cat-chip">${c}</span>`).join('')
+      const customHtml = customCats.map(c => `
+        <span class="cat-chip custom">${c}
+          <button class="cat-chip-del" onclick="deleteCategory('${c}')" title="Delete">×</button>
+        </span>`).join('')
+      grid.innerHTML = sysHtml + customHtml
+    }
+
+    async function addCategory() {
+      const input = document.getElementById('cat-input')
+      const name = input.value.trim()
+      if (!name) return
+      const statusEl = document.getElementById('cat-status')
+      const res = await fetch('/settings/add-category', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name }) })
+      if (res.ok) {
+        customCats.push(name); input.value = ''; statusEl.textContent = '✓ Added'
+        setTimeout(() => { statusEl.textContent = '' }, 2000)
+        renderCategories()
+        document.getElementById('cat-select').innerHTML = [...systemCats, ...customCats].sort().map(c => `<option value="${c}">${c}</option>`).join('')
+      } else { statusEl.textContent = '✗ ' + (await res.json()).error }
+    }
+
+    async function deleteCategory(name) {
+      if (!confirm(`Delete category "${name}"?`)) return
+      const res = await fetch(`/settings/category/${encodeURIComponent(name)}`, { method: 'DELETE' })
+      if (res.ok) { customCats = customCats.filter(c => c !== name); renderCategories() }
+    }
+
+    // ── SETTINGS ──────────────────────────────────────────────────────────────
+
+    async function loadSettings() {
+      settingsLoaded = true
+      const [instRes, settingsRes] = await Promise.all([
+        fetch('/link/status'),
+        fetch('/settings/data'),
+      ])
+      const items = await instRes.json()
+      const settings = await settingsRes.json()
+
+      const instEl = document.getElementById('inst-list')
+      instEl.innerHTML = items.length
+        ? items.map(item => `
+          <div class="inst-card ${item.healthy ? '' : 'error'}" data-item-id="${item.id}">
+            <div>
+              <div class="inst-name">${item.institution_name}</div>
+              <span class="inst-badge ${item.healthy ? 'healthy' : 'error'}">${item.healthy ? 'Healthy' : (item.error_code ?? 'Error')}</span>
+            </div>
+            ${!item.healthy ? `<button class="reauth-btn" data-item-id="${item.id}">Re-authenticate</button>` : ''}
+          </div>`).join('')
+        : '<div class="empty">No institutions linked.</div>'
+
+      instEl.querySelectorAll('.reauth-btn').forEach(btn => {
+        btn.addEventListener('click', () => startReauth(btn.dataset.itemId, btn))
+      })
+
+      document.getElementById('acct-select').innerHTML = (settings.accounts ?? [])
+        .map(a => `<option value="${a.id}">${a.name}${a.mask ? ' ···' + a.mask : ''}</option>`).join('')
+    }
+
+    async function startReauth(itemId, btn) {
+      btn.disabled = true; btn.textContent = 'Opening…'
+      const { link_token } = await fetch('/link/reauth-token', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ item_id: itemId }),
+      }).then(r => r.json())
+      const handler = Plaid.create({
+        token: link_token,
+        onSuccess: () => { btn.textContent = 'Done!'; setTimeout(() => loadSettings(), 500) },
+        onExit: () => { btn.disabled = false; btn.textContent = 'Re-authenticate' },
+      })
+      handler.open()
+    }
+
+    async function renameAccount() {
+      const accountId = document.getElementById('acct-select').value
+      const name = document.getElementById('rename-input').value.trim()
+      const statusEl = document.getElementById('rename-status')
+      if (!name) return
+      const res = await fetch('/settings/rename-account', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ account_id: accountId, display_name: name }),
+      })
+      if (res.ok) {
+        statusEl.textContent = '✓ Renamed'
+        document.getElementById('rename-input').value = ''
+        setTimeout(() => { statusEl.textContent = '' }, 2000)
+        loadSettings()
+      } else { statusEl.textContent = '✗ Error' }
+    }
+
+    // Load first tab
+    loadRules()
+  </script>
+</body>
+</html>
