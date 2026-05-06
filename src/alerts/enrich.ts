@@ -1,5 +1,5 @@
 import { anthropic } from '../categorize/claude.js'
-import { db } from '../db/client.js'
+import { sql } from '../db/client.js'
 
 export async function enrichAlertContext(
   alertType: string,
@@ -10,15 +10,15 @@ export async function enrichAlertContext(
     since.setDate(since.getDate() - 30)
     const sinceStr = since.toISOString().split('T')[0]
 
-    const { data: recentTx } = await db
-      .from('transactions')
-      .select('category, amount, date, merchant_name')
-      .gte('date', sinceStr)
-      .eq('is_income', false)
-      .order('date', { ascending: false })
+    const recentTx = await sql<Array<{ category: string | null; amount: number; date: string; merchant_name: string | null }>>`
+      SELECT category, amount, date, merchant_name
+      FROM transactions
+      WHERE date >= ${sinceStr} AND is_income = false
+      ORDER BY date DESC
+    `
 
     const categoryTotals: Record<string, number> = {}
-    for (const tx of recentTx ?? []) {
+    for (const tx of recentTx) {
       const cat = tx.category ?? 'Other'
       categoryTotals[cat] = (categoryTotals[cat] ?? 0) + Number(tx.amount)
     }

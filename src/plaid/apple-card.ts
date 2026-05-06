@@ -1,6 +1,6 @@
 import { checkAuth, checkAuthPage } from '../auth.js'
 import type { FastifyRequest, FastifyReply } from 'fastify'
-import { db } from '../db/client.js'
+import { sql } from '../db/client.js'
 import { readFileSync } from 'fs'
 import { fileURLToPath } from 'url'
 import { dirname, join } from 'path'
@@ -41,27 +41,21 @@ function splitCSVLine(line: string): string[] {
 }
 
 async function ensureAppleCardAccount(): Promise<string> {
-  const { data: existing } = await db
-    .from('accounts')
-    .select('id')
-    .eq('plaid_account_id', APPLE_CARD_PLAID_ID)
-    .single()
+  const [existing] = await sql<Array<{ id: string }>>`
+    SELECT id FROM accounts
+    WHERE plaid_account_id = ${APPLE_CARD_PLAID_ID}
+    LIMIT 1
+  `
 
   if (existing) return existing.id
 
-  const { data: created, error } = await db
-    .from('accounts')
-    .insert({
-      plaid_account_id: APPLE_CARD_PLAID_ID,
-      name: 'Apple Card',
-      type: 'credit',
-      subtype: 'credit card',
-    })
-    .select('id')
-    .single()
+  const [created] = await sql<Array<{ id: string }>>`
+    INSERT INTO accounts (plaid_account_id, name, type, subtype)
+    VALUES (${APPLE_CARD_PLAID_ID}, 'Apple Card', 'credit', 'credit card')
+    RETURNING id
+  `
 
-  if (error) throw new Error(error.message)
-  return created!.id
+  return created.id
 }
 
 export async function appleCardPageHandler(req: FastifyRequest, reply: FastifyReply) {
@@ -73,20 +67,19 @@ export async function appleCardPageHandler(req: FastifyRequest, reply: FastifyRe
 export async function appleCardStatusHandler(req: FastifyRequest, reply: FastifyReply) {
   if (!checkAuth(req, reply)) return
 
-  const { data: acct } = await db
-    .from('accounts')
-    .select('id')
-    .eq('plaid_account_id', APPLE_CARD_PLAID_ID)
-    .single()
+  const [acct] = await sql<Array<{ id: string }>>`
+    SELECT id FROM accounts
+    WHERE plaid_account_id = ${APPLE_CARD_PLAID_ID}
+    LIMIT 1
+  `
 
   if (!acct) return reply.send({ exists: false, count: 0 })
 
-  const { count } = await db
-    .from('transactions')
-    .select('id', { count: 'exact', head: true })
-    .eq('account_id', acct.id)
+  const [{ count }] = await sql<Array<{ count: string }>>`
+    SELECT COUNT(*) as count FROM transactions WHERE account_id = ${acct.id}
+  `
 
-  await reply.send({ exists: true, count: count ?? 0 })
+  await reply.send({ exists: true, count: Number(count) })
 }
 
 export async function appleCardImportHandler(req: FastifyRequest, reply: FastifyReply) {
@@ -132,36 +125,52 @@ export async function appleCardImportHandler(req: FastifyRequest, reply: Fastify
     // Deterministic dedup key
     const dedupKey = `apple-card-${isoDate}-${amountRaw.replace('.', '_')}-${description.toLowerCase().replace(/\s+/g, '-').slice(0, 40)}`
 
-    const { error } = await db.from('transactions').insert({
-      plaid_transaction_id: dedupKey,
-      account_id: accountId,
-      amount: storedAmount,
-      merchant_name: merchant,
-      date: isoDate,
-      category,
-      is_recurring: false,
-      is_income: isIncome,
-      flagged_for_review: false,
-    })
-
-    if (error) {
-      if (error.code === '23505') { skipped++ } // duplicate
-      else { errors.push(`${merchant} ${txDate}: ${error.message}`) }
-    } else {
+    try {
+      await sql`
+        INSERT INTO transactions (
+          plaid_transaction_id, account_id, amount, merchant_name, date,
+          category, is_recurring, is_income, flagged_for_review
+        ) VALUES (
+          ${dedupKey}, ${accountId}, ${storedAmount}, ${merchant}, ${isoDate},
+          ${category}, false, ${isIncome}, false
+        )
+      `
       imported++
+    } catch (e: any) {
+      if (e.code === '23505') { skipped++ } // duplicate
+      else { errors.push(`${merchant} ${txDate}: ${e.message}`) }
     }
   }
 
   // Recompute Apple Card balance from all transactions and snapshot it
-  const { data: txns } = await db
-    .from('transactions')
-    .select('amount, is_income')
-    .eq('account_id', accountId)
+  const txns = await sql<Array<{ amount: number; is_income: boolean }>>`
+    SELECT amount, is_income FROM transactions WHERE account_id = ${accountId}
+  `
 
-  if (txns && txns.length > 0) {
+  if (txns.length > 0) {
     const balance = txns.reduce((sum, t) => sum + (t.is_income ? -Number(t.amount) : Number(t.amount)), 0)
-    await db.from('balance_snapshots').insert({ account_id: accountId, balance: Math.max(0, balance) })
+    await sql`INSERT INTO balance_snapshots (account_id, balance) VALUES (${accountId}, ${Math.max(0, balance)})`
   }
 
   await reply.send({ imported, skipped, errors })
+}
+
+export async function appleCardBalanceHandler(req: FastifyRequest, reply: FastifyReply) {
+  if (!checkAuth(req, reply)) return
+
+  const { balance } = ((req.body as any)._parsed ?? req.body) as { balance: number }
+  if (balance === undefined || isNaN(Number(balance))) {
+    return reply.code(400).send({ error: 'balance required' })
+  }
+
+  const accountId = await ensureAppleCardAccount()
+  try {
+    await sql`
+      INSERT INTO balance_snapshots (account_id, balance)
+      VALUES (${accountId}, ${Math.max(0, Number(balance))})
+    `
+  } catch (e: any) {
+    return reply.code(500).send({ error: e.message })
+  }
+  await reply.send({ ok: true })
 }

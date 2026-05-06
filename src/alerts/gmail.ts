@@ -1,16 +1,28 @@
-import nodemailer from 'nodemailer'
+import { google } from 'googleapis'
 import type { AlertPayload } from '../types.js'
 
 const RECIPIENT = 'ro.rakhit@gmail.com'
 
-function createTransport() {
-  return nodemailer.createTransport({
-    service: 'gmail',
-    auth: {
-      user: process.env.GMAIL_USER,
-      pass: process.env.GMAIL_APP_PASSWORD,
-    },
-  })
+function getGmailClient() {
+  const auth = new google.auth.OAuth2(
+    process.env.GMAIL_CLIENT_ID,
+    process.env.GMAIL_CLIENT_SECRET,
+  )
+  auth.setCredentials({ refresh_token: process.env.GMAIL_REFRESH_TOKEN })
+  return google.gmail({ version: 'v1', auth })
+}
+
+function makeRawMessage(from: string, to: string, subject: string, body: string): string {
+  const message = [
+    `From: ${from}`,
+    `To: ${to}`,
+    `Subject: ${subject}`,
+    `MIME-Version: 1.0`,
+    `Content-Type: text/plain; charset=utf-8`,
+    ``,
+    body,
+  ].join('\r\n')
+  return Buffer.from(message).toString('base64url')
 }
 
 function formatAlertEmail(payload: AlertPayload): { subject: string; text: string } {
@@ -28,7 +40,7 @@ function formatAlertEmail(payload: AlertPayload): { subject: string; text: strin
     paycheck_detected: `💰 Paycheck received: $${data['paycheckAmount']}`,
   }
 
-  const subject = subjects[type] ?? `AutoBudget: ${type}`
+  const subject = subjects[type] ?? `GhostPaper: ${type}`
   const body = enrichedContext
     ? `${subject}\n\n${enrichedContext}`
     : subject
@@ -38,14 +50,15 @@ function formatAlertEmail(payload: AlertPayload): { subject: string; text: strin
 
 export async function sendAlert(payload: AlertPayload): Promise<void> {
   try {
-    const transport = createTransport()
+    const gmail = getGmailClient()
     const { subject, text } = formatAlertEmail(payload)
-    await transport.sendMail({
-      from: process.env.GMAIL_USER,
-      to: RECIPIENT,
-      subject: `[AutoBudget] ${subject}`,
+    const raw = makeRawMessage(
+      process.env.GMAIL_USER!,
+      RECIPIENT,
+      `[GhostPaper] ${subject}`,
       text,
-    })
+    )
+    await gmail.users.messages.send({ userId: 'me', requestBody: { raw } })
   } catch (err) {
     console.error('Failed to send alert email:', err)
   }
@@ -53,13 +66,14 @@ export async function sendAlert(payload: AlertPayload): Promise<void> {
 
 export async function sendEmail(subject: string, body: string): Promise<void> {
   try {
-    const transport = createTransport()
-    await transport.sendMail({
-      from: process.env.GMAIL_USER,
-      to: RECIPIENT,
-      subject: `[AutoBudget] ${subject}`,
-      text: body,
-    })
+    const gmail = getGmailClient()
+    const raw = makeRawMessage(
+      process.env.GMAIL_USER!,
+      RECIPIENT,
+      `[GhostPaper] ${subject}`,
+      body,
+    )
+    await gmail.users.messages.send({ userId: 'me', requestBody: { raw } })
   } catch (err) {
     console.error('Failed to send email:', err)
   }
