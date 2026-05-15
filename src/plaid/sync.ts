@@ -124,7 +124,7 @@ export async function syncTransactions(plaidItemId: string): Promise<{ added: nu
     hasMore = has_more
   }
 
-  await sql`UPDATE plaid_items SET cursor = ${cursor ?? null} WHERE id = ${plaidItemId}`
+  await sql`UPDATE plaid_items SET cursor = ${cursor ?? null}, last_synced_at = now() WHERE id = ${plaidItemId}`
 
   await snapshotBalances(item.access_token)
 

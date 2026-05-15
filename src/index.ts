@@ -6,7 +6,7 @@ import { dirname, join } from 'path'
 import { fileURLToPath } from 'url'
 import { readFileSync } from 'fs'
 import { webhookHandler, checkWebhookHealth } from './plaid/webhook.js'
-import { linkHandler, linkTokenHandler, linkedAccountsHandler, linkExchangeHandler, oauthReturnHandler, repairWebhooksHandler, syncAllHandler, setupGetHandler, setupPostHandler, itemStatusHandler, reauthTokenHandler } from './plaid/link.js'
+import { linkHandler, linkTokenHandler, linkedAccountsHandler, linkExchangeHandler, oauthReturnHandler, repairWebhooksHandler, syncAllHandler, syncQuotaHandler, setupGetHandler, setupPostHandler, itemStatusHandler, reauthTokenHandler } from './plaid/link.js'
 import { reviewTransactionsHandler, reviewCorrectHandler, merchantTransactionsHandler, correctTransactionHandler, confirmTransactionHandler, confirmMerchantHandler, toggleRecurringHandler, allTransactionsHandler } from './plaid/review.js'
 import { rulesPageHandler, listRulesHandler, createRuleHandler, deleteRuleHandler } from './plaid/rules.js'
 import { settingsDataHandler, renameAccountHandler, addCategoryHandler, deleteCategoryHandler, updateAprHandler, updateLoanHandler } from './plaid/settings.js'
@@ -69,6 +69,7 @@ app.get('/link/token', linkTokenHandler)
 app.get('/link/accounts', linkedAccountsHandler)
 app.post('/link/repair-webhooks', repairWebhooksHandler)
 app.post('/link/sync-all', syncAllHandler)
+app.get('/link/sync-quota', syncQuotaHandler)
 app.get('/link/status', itemStatusHandler)
 app.post('/link/reauth-token', reauthTokenHandler)
 app.post('/link/exchange', linkExchangeHandler)

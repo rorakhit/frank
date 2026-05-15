@@ -64,6 +64,7 @@
       <a class="nav-link" href="/accounts">Config</a>
     </div>
     <div class="nav-right" style="display:flex;align-items:center;gap:6px">
+      <span id="sync-status" style="display:none;font-size:0.72rem;color:var(--muted);white-space:nowrap"></span>
       <button class="btn btn-ghost btn-sm sync-btn" id="sync-btn" onclick="syncAll()" style="display:none">
         <span id="sync-icon">↻</span> Sync
       </button>
@@ -153,11 +154,40 @@
   <script>
     const fmt = n => '$' + Math.abs(n).toLocaleString('en-US', { maximumFractionDigits: 0 })
 
+    function updateSyncStatus(stats) {
+      const statusEl = document.getElementById('sync-status')
+      const syncBtn = document.getElementById('sync-btn')
+      const quota = stats.syncQuota
+      const lastSync = stats.lastSyncedAt
+
+      let parts = []
+      if (lastSync) {
+        const d = new Date(lastSync)
+        const now = new Date()
+        const diffMin = Math.round((now - d) / 60000)
+        const diffHr = Math.round(diffMin / 60)
+        const diffDay = Math.round(diffHr / 24)
+        const label = diffMin < 2 ? 'just now'
+          : diffMin < 60 ? `${diffMin}m ago`
+          : diffHr < 24 ? `${diffHr}h ago`
+          : `${diffDay}d ago`
+        parts.push(`synced ${label}`)
+      }
+      if (quota) {
+        parts.push(`${quota.remaining}/${quota.limit} syncs left`)
+        syncBtn.disabled = quota.remaining === 0
+        syncBtn.title = quota.remaining === 0 ? `Monthly sync limit reached (${quota.limit}/month)` : ''
+      }
+      statusEl.textContent = parts.join(' · ')
+      statusEl.style.display = parts.length ? 'inline' : 'none'
+    }
+
     function showDashboard(stats) {
       document.getElementById('login-wrap').style.display = 'none'
       document.getElementById('dashboard').style.display = 'block'
       document.getElementById('sync-btn').style.display = 'flex'
       document.getElementById('auth-btn').textContent = 'Sign out'
+      updateSyncStatus(stats)
 
       const nw = stats.netWorth
       document.getElementById('s-networth').textContent = (nw < 0 ? '-' : '') + fmt(nw)
@@ -291,7 +321,13 @@
       btn.disabled = true
       icon.className = 'spinning'
       try {
-        await fetch('/link/sync-all', { method: 'POST' })
+        const res = await fetch('/link/sync-all', { method: 'POST' })
+        if (res.status === 429) {
+          const data = await res.json()
+          document.getElementById('sync-status').textContent = data.error
+          document.getElementById('sync-status').style.display = 'inline'
+          return
+        }
         const stats = await fetch('/home/stats').then(r => r.json())
         showDashboard(stats)
       } finally { btn.disabled = false; icon.className = '' }

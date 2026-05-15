@@ -9,7 +9,9 @@ export async function homeStatsHandler(req: FastifyRequest, reply: FastifyReply)
   const thirtyDaysAgoIso = thirtyDaysAgo.toISOString()
   const thirtyDaysAgoDate = thirtyDaysAgo.toISOString().split('T')[0]
 
-  const [accounts, allSnapshots, oldSnapshots, recentTxns, pendingReviewsRow] = await Promise.all([
+  const monthStart = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString()
+
+  const [accounts, allSnapshots, oldSnapshots, recentTxns, pendingReviewsRow, lastSyncRow, syncCountRow] = await Promise.all([
     sql<Array<{ id: string; type: string; subtype: string | null }>>`
       SELECT id, type, subtype FROM accounts
     `,
@@ -32,9 +34,17 @@ export async function homeStatsHandler(req: FastifyRequest, reply: FastifyReply)
       SELECT COUNT(*) as count FROM transactions
       WHERE flagged_for_review = true
     `,
+    sql<Array<{ last_synced_at: string | null }>>`
+      SELECT MAX(last_synced_at) as last_synced_at FROM plaid_items
+    `,
+    sql<Array<{ count: string }>>`
+      SELECT COUNT(*) as count FROM manual_syncs WHERE synced_at >= ${monthStart}
+    `,
   ])
 
   const pendingReviews = Number(pendingReviewsRow[0]?.count ?? 0)
+  const lastSyncedAt = lastSyncRow[0]?.last_synced_at ?? null
+  const manualSyncsUsed = Number(syncCountRow[0]?.count ?? 0)
 
   // Latest snapshot per account
   const latestByAccount = new Map<string, number>()
@@ -87,5 +97,7 @@ export async function homeStatsHandler(req: FastifyRequest, reply: FastifyReply)
     totalDebt: Math.round(totalDebt * 100) / 100,
     savingsThisMonth: Math.round(savingsThisMonth * 100) / 100,
     pendingReviews,
+    lastSyncedAt,
+    syncQuota: { used: manualSyncsUsed, limit: 20, remaining: Math.max(0, 20 - manualSyncsUsed) },
   })
 }

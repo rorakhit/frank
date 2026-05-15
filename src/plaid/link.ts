@@ -98,15 +98,37 @@ export async function repairWebhooksHandler(req: FastifyRequest, reply: FastifyR
   await reply.send({ updated: results })
 }
 
+const MONTHLY_SYNC_LIMIT = 20
+
+export async function syncQuotaHandler(req: FastifyRequest, reply: FastifyReply) {
+  if (!checkAuth(req, reply)) return
+  const monthStart = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString()
+  const [{ count }] = await sql<Array<{ count: string }>>`
+    SELECT COUNT(*) as count FROM manual_syncs WHERE synced_at >= ${monthStart}
+  `
+  await reply.send({ used: Number(count), limit: MONTHLY_SYNC_LIMIT, remaining: Math.max(0, MONTHLY_SYNC_LIMIT - Number(count)) })
+}
+
 export async function syncAllHandler(req: FastifyRequest, reply: FastifyReply) {
   if (!checkAuth(req, reply)) return
+
+  const monthStart = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString()
+  const [{ count }] = await sql<Array<{ count: string }>>`
+    SELECT COUNT(*) as count FROM manual_syncs WHERE synced_at >= ${monthStart}
+  `
+  const used = Number(count)
+  if (used >= MONTHLY_SYNC_LIMIT) {
+    return reply.code(429).send({ error: `Monthly sync limit reached (${MONTHLY_SYNC_LIMIT}/month). Webhooks still run automatically.`, used, limit: MONTHLY_SYNC_LIMIT })
+  }
 
   const items = await sql<Array<{ id: string; institution_name: string }>>`
     SELECT id, institution_name FROM plaid_items
   `
   if (!items.length) return reply.send({ results: [] })
 
-  await reply.send({ started: items.map(i => i.institution_name) })
+  await sql`INSERT INTO manual_syncs DEFAULT VALUES`
+
+  await reply.send({ started: items.map(i => i.institution_name), used: used + 1, limit: MONTHLY_SYNC_LIMIT, remaining: MONTHLY_SYNC_LIMIT - used - 1 })
 
   setImmediate(async () => {
     for (const item of items) {
