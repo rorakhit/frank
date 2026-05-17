@@ -1,6 +1,6 @@
 CREATE TABLE institutions (
   id                 uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
-  source             text        NOT NULL UNIQUE, -- 'affinity' | 'sofi' | 'chase'
+  source             text        NOT NULL UNIQUE, -- 'affinity_fcu' | 'sofi' | 'chase'
   display_name       text        NOT NULL,
   last_scraped_at    timestamptz,
   last_scrape_ok     boolean,
@@ -9,7 +9,7 @@ CREATE TABLE institutions (
 );
 
 INSERT INTO institutions (source, display_name) VALUES
-  ('affinity', 'Affinity FCU'),
+  ('affinity_fcu', 'Affinity FCU'),
   ('sofi',     'SoFi'),
   ('chase',    'Chase');
 

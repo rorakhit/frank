@@ -32,7 +32,7 @@ func TestFetchTransactions_ReturnsInsertedTransactions(t *testing.T) {
 	// Seed institution + account
 	var instID string
 	err := pool.QueryRow(ctx, `
-		SELECT id FROM institutions WHERE source = 'affinity'
+		SELECT id FROM institutions WHERE source = 'affinity_fcu'
 	`).Scan(&instID)
 	if err != nil {
 		t.Fatalf("get institution: %v", err)
@@ -148,7 +148,7 @@ func TestFetchTransactions_FieldMapping(t *testing.T) {
 	ctx := context.Background()
 
 	var instID string
-	pool.QueryRow(ctx, `SELECT id FROM institutions WHERE source = 'affinity'`).Scan(&instID)
+	pool.QueryRow(ctx, `SELECT id FROM institutions WHERE source = 'affinity_fcu'`).Scan(&instID)
 
 	var acctID string
 	pool.QueryRow(ctx, `
@@ -196,6 +196,67 @@ func TestFetchTransactions_FieldMapping(t *testing.T) {
 	if tx.IsIncome {
 		t.Error("IsIncome should be false")
 	}
+}
+
+func TestListInstitutions_ReturnsSeedData(t *testing.T) {
+	pool := testdb.New(t)
+	ctx := context.Background()
+
+	institutions, err := ListInstitutions(ctx, pool)
+	if err != nil {
+		t.Fatalf("ListInstitutions: %v", err)
+	}
+	// Seed data in 001_core.up.sql inserts affinity_fcu, sofi, chase.
+	if len(institutions) != 3 {
+		t.Fatalf("expected 3 seed institutions, got %d", len(institutions))
+	}
+
+	sources := make(map[string]bool)
+	for _, inst := range institutions {
+		sources[inst.Source] = true
+		if inst.ID == "" {
+			t.Errorf("institution %q has empty ID", inst.Source)
+		}
+		if inst.DisplayName == "" {
+			t.Errorf("institution %q has empty DisplayName", inst.Source)
+		}
+	}
+	for _, expected := range []string{"affinity_fcu", "sofi", "chase"} {
+		if !sources[expected] {
+			t.Errorf("missing institution source %q", expected)
+		}
+	}
+}
+
+func TestListInstitutions_ReflectsScrapeStatus(t *testing.T) {
+	pool := testdb.New(t)
+	ctx := context.Background()
+
+	ranAt := time.Date(2026, 5, 17, 2, 0, 0, 0, time.UTC)
+	_, err := pool.Exec(ctx, `
+		UPDATE institutions SET last_scraped_at = $1, last_scrape_ok = true WHERE source = 'sofi'
+	`, ranAt)
+	if err != nil {
+		t.Fatalf("update institution: %v", err)
+	}
+
+	institutions, err := ListInstitutions(ctx, pool)
+	if err != nil {
+		t.Fatalf("ListInstitutions: %v", err)
+	}
+
+	for _, inst := range institutions {
+		if inst.Source == "sofi" {
+			if inst.LastScrapedAt == nil {
+				t.Error("expected LastScrapedAt to be set for sofi")
+			}
+			if inst.LastScrapeOk == nil || !*inst.LastScrapeOk {
+				t.Error("expected LastScrapeOk = true for sofi")
+			}
+			return
+		}
+	}
+	t.Error("sofi institution not found")
 }
 
 func TestInsertInsight_RoundTrip(t *testing.T) {

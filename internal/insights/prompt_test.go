@@ -28,7 +28,7 @@ func TestBuildPrompts_SystemPromptUnchanged(t *testing.T) {
 		Start:        baseDate,
 		End:          baseDate.AddDate(0, 0, 14),
 		Transactions: nil,
-	})
+	}, "")
 	if !strings.Contains(sys, "personal finance analyst") {
 		t.Error("system prompt missing expected content")
 	}
@@ -48,7 +48,7 @@ func TestBuildPrompts_TotalsCorrect(t *testing.T) {
 		Start:        baseDate,
 		End:          baseDate.AddDate(0, 0, 14),
 		Transactions: txns,
-	})
+	}, "")
 
 	if !strings.Contains(user, "Total spend: $80.00") {
 		t.Errorf("expected total spend $80.00 in prompt, got:\n%s", user)
@@ -72,7 +72,7 @@ func TestBuildPrompts_CategoryAggregation(t *testing.T) {
 		Start:        baseDate,
 		End:          baseDate.AddDate(0, 1, 0),
 		Transactions: txns,
-	})
+	}, "")
 
 	if !strings.Contains(user, "Groceries") {
 		t.Error("expected Groceries category in prompt")
@@ -91,7 +91,7 @@ func TestBuildPrompts_UncategorizedFallback(t *testing.T) {
 		Start:        baseDate,
 		End:          baseDate.AddDate(0, 0, 14),
 		Transactions: txns,
-	})
+	}, "")
 
 	if !strings.Contains(user, "Uncategorized") {
 		t.Error("expected 'Uncategorized' for transaction with empty category")
@@ -109,7 +109,7 @@ func TestBuildPrompts_RecurringSection(t *testing.T) {
 		Start:        baseDate,
 		End:          baseDate.AddDate(0, 0, 14),
 		Transactions: txns,
-	})
+	}, "")
 
 	if !strings.Contains(user, "Recurring charges this period") {
 		t.Error("expected recurring section header")
@@ -131,7 +131,7 @@ func TestBuildPrompts_NoRecurringSectionWhenNone(t *testing.T) {
 		Start:        baseDate,
 		End:          baseDate.AddDate(0, 0, 14),
 		Transactions: txns,
-	})
+	}, "")
 
 	if strings.Contains(user, "Recurring charges this period") {
 		t.Error("recurring section should not appear when no recurring transactions")
@@ -145,7 +145,7 @@ func TestBuildPrompts_PeriodHeader(t *testing.T) {
 		PeriodType: "biweekly",
 		Start:      start,
 		End:        end,
-	})
+	}, "")
 
 	if !strings.Contains(user, "biweekly") {
 		t.Error("expected period type in prompt header")
@@ -167,7 +167,7 @@ func TestBuildPrompts_TransactionTable(t *testing.T) {
 		Start:        baseDate,
 		End:          baseDate.AddDate(0, 0, 14),
 		Transactions: txns,
-	})
+	}, "")
 
 	if !strings.Contains(user, "2026-05-03") {
 		t.Error("expected ISO date in transaction table")
@@ -189,7 +189,7 @@ func TestBuildPrompts_CreditSignPositive(t *testing.T) {
 		Start:        baseDate,
 		End:          baseDate.AddDate(0, 0, 14),
 		Transactions: txns,
-	})
+	}, "")
 
 	if !strings.Contains(user, "+$500.00") {
 		t.Error("expected credit amount with plus sign in table")
@@ -202,7 +202,7 @@ func TestBuildPrompts_EmptyTransactions(t *testing.T) {
 		Start:        baseDate,
 		End:          baseDate.AddDate(0, 0, 14),
 		Transactions: nil,
-	})
+	}, "")
 	if !strings.Contains(user, "Total transactions: 0") {
 		t.Error("expected 0 transaction count for empty period")
 	}
@@ -225,7 +225,7 @@ func TestBuildPrompts_TransactionCountInHeader(t *testing.T) {
 		Start:        baseDate,
 		End:          baseDate.AddDate(0, 1, 0),
 		Transactions: txns,
-	})
+	}, "")
 	if !strings.Contains(user, "Total transactions: 3") {
 		t.Errorf("expected transaction count of 3, got prompt:\n%s", user)
 	}
@@ -241,7 +241,7 @@ func TestBuildPrompts_CreditNotCountedInCategorySpend(t *testing.T) {
 		Start:        baseDate,
 		End:          baseDate.AddDate(0, 0, 14),
 		Transactions: txns,
-	})
+	}, "")
 	// Only the debit should appear in category spend ($100, not $600)
 	if !strings.Contains(user, "$100.00") {
 		t.Errorf("expected only debit in category spend, got:\n%s", user)
@@ -262,7 +262,7 @@ func TestBuildPrompts_IsIncomeCreditExcludedFromCategorySpend(t *testing.T) {
 		Start:        baseDate,
 		End:          baseDate.AddDate(0, 0, 14),
 		Transactions: txns,
-	})
+	}, "")
 	if strings.Contains(user, "Income") && strings.Contains(user, "$2000.00") {
 		// Only a problem if "Income" appears in the category spend section
 		// (it's fine in the transaction table). Check it doesn't appear there.
@@ -283,7 +283,7 @@ func TestBuildPrompts_RecurringIncludesIncomeTransactions(t *testing.T) {
 		Start:        baseDate,
 		End:          baseDate.AddDate(0, 0, 14),
 		Transactions: txns,
-	})
+	}, "")
 	if !strings.Contains(user, "Recurring charges this period") {
 		t.Error("expected recurring section")
 	}
@@ -305,7 +305,7 @@ func TestBuildPrompts_NetNegativeWhenSpendExceedsIncome(t *testing.T) {
 		Start:        baseDate,
 		End:          baseDate.AddDate(0, 0, 14),
 		Transactions: txns,
-	})
+	}, "")
 	if !strings.Contains(user, "Net: $-300.00") {
 		t.Errorf("expected negative net, got prompt:\n%s", user)
 	}

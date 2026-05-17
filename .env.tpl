@@ -1,0 +1,12 @@
+DATABASE_URL=op://Development/frank/DATABASE_URL
+ANTHROPIC_API_KEY=op://Development/frank/ANTHROPIC_API_KEY
+GMAIL_USER=op://Development/frank/GMAIL_USER
+GMAIL_APP_PASSWORD=op://Development/frank/GMAIL_APP_PASSWORD
+AFFINITY_USERNAME=op://Finance/affinityfcu.com/username
+AFFINITY_PASSWORD=op://Finance/affinityfcu.com/password
+AFFINITY_TOTP_SECRET=op://Development/frank/AFFINITY_TOTP_SECRET
+SOFI_USERNAME=op://Finance/sofi.com/username
+SOFI_PASSWORD=op://Finance/sofi.com/password
+SOFI_TOTP_SECRET=op://Development/frank/SOFI_TOTP_SECRET
+CHASE_USERNAME=op://Finance/chase.com/username
+CHASE_PASSWORD=op://Finance/chase.com/password

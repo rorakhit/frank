@@ -81,8 +81,9 @@ type Analyzer interface {
 - Assembles and returns an `evals.Record` with full input/output provenance
 - Defaults: empty `Config{}` is filled with `DefaultModel`, `DefaultMaxTokens`, `DefaultTemperature`
 
-**`prompt.go`** — `BuildPrompts(PeriodSummary) (system, user string)`:
+**`prompt.go`** — `BuildPrompts(PeriodSummary, userContext string) (system, user string)`:
 - System prompt: instructs Claude as a personal finance analyst for Affinity FCU / SoFi / Chase; mandates JSON output with `raw_analysis` and `key_findings` fields
+- If `userContext` is non-empty (loaded from `context.md` at project root), it is appended to the system prompt under a "## User Context" heading. This file is gitignored — see `context.md.example` for the template
 - User prompt: period header, transaction totals (spend/income/net), spend by category, recurring charges section, full transaction table
 
 ### `internal/evals`

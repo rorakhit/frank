@@ -62,6 +62,40 @@ func FetchTransactions(ctx context.Context, pool *pgxpool.Pool, start, end time.
 	return txns, rows.Err()
 }
 
+type Institution struct {
+	ID              string     `json:"id"`
+	Source          string     `json:"source"`
+	DisplayName     string     `json:"display_name"`
+	LastScrapedAt   *time.Time `json:"last_scraped_at"`
+	LastScrapeOk    *bool      `json:"last_scrape_ok"`
+	LastScrapeError *string    `json:"last_scrape_error"`
+}
+
+func ListInstitutions(ctx context.Context, pool *pgxpool.Pool) ([]Institution, error) {
+	rows, err := pool.Query(ctx, `
+		SELECT id, source, display_name, last_scraped_at, last_scrape_ok, last_scrape_error
+		FROM institutions
+		ORDER BY display_name
+	`)
+	if err != nil {
+		return nil, fmt.Errorf("list institutions: %w", err)
+	}
+	defer rows.Close()
+
+	var institutions []Institution
+	for rows.Next() {
+		var inst Institution
+		if err := rows.Scan(
+			&inst.ID, &inst.Source, &inst.DisplayName,
+			&inst.LastScrapedAt, &inst.LastScrapeOk, &inst.LastScrapeError,
+		); err != nil {
+			return nil, fmt.Errorf("scan institution: %w", err)
+		}
+		institutions = append(institutions, inst)
+	}
+	return institutions, rows.Err()
+}
+
 func InsertInsight(ctx context.Context, pool *pgxpool.Pool, ins Insight) error {
 	findings := make([]string, len(ins.KeyFindings))
 	copy(findings, ins.KeyFindings)

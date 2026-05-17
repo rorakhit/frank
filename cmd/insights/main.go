@@ -79,8 +79,21 @@ func main() {
 		Transactions: txns,
 	}
 
+	if *period == "yearly" {
+		loans, err := db.ListLoans(ctx, pool)
+		if err != nil {
+			log.Fatalf("list loans: %v", err)
+		}
+		credits, err := db.ListCreditAccounts(ctx, pool)
+		if err != nil {
+			log.Fatalf("list credit accounts: %v", err)
+		}
+		p.Loans = loans
+		p.CreditAccounts = credits
+	}
+
 	if *dryRun {
-		sys, user := insights.BuildPrompts(p)
+		sys, user := insights.BuildPrompts(p, "")
 		fmt.Println("=== SYSTEM PROMPT ===")
 		fmt.Println(sys)
 		fmt.Println("\n=== USER PROMPT ===")

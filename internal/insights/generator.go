@@ -4,6 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
+	"runtime"
 	"strings"
 
 	"github.com/rorakhit/frank/internal/evals"
@@ -11,7 +14,7 @@ import (
 
 const (
 	DefaultModel          = "claude-sonnet-4-6"
-	DefaultMaxTokens      = 4096
+	DefaultMaxTokens      = 8000
 	DefaultTemperature    = 1.0
 	DefaultThinkingBudget = 5000
 )
@@ -65,7 +68,8 @@ func Generate(ctx context.Context, analyzer Analyzer, cfg Config, period PeriodS
 		cfg.Temperature = DefaultTemperature
 	}
 
-	systemPrompt, userPrompt := BuildPrompts(period)
+	userContext := loadUserContext()
+	systemPrompt, userPrompt := BuildPrompts(period, userContext)
 
 	req := AnalysisRequest{
 		SystemPrompt:   systemPrompt,
@@ -111,4 +115,19 @@ func Generate(ctx context.Context, analyzer Analyzer, cfg Config, period PeriodS
 	record := evals.NewRecord(cfg.Model, period.PeriodType, period.Start, period.End, evalIn, evalOut)
 
 	return result, record, nil
+}
+
+// loadUserContext reads context.md from the project root. Returns empty string
+// if the file doesn't exist — context is optional.
+func loadUserContext() string {
+	_, filename, _, ok := runtime.Caller(0)
+	if !ok {
+		return ""
+	}
+	path := filepath.Join(filepath.Dir(filename), "..", "..", "context.md")
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return ""
+	}
+	return string(b)
 }

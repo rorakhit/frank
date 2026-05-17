@@ -1,5 +1,6 @@
 # =============================================================================
-# Environment & Secrets — NEVER commit real credentials
+# Secrets — managed via 1Password, never stored in plaintext files
+# .env.tpl (committed) contains op:// references, not real values
 # =============================================================================
 .env
 .env.local
@@ -121,3 +122,14 @@ _bmad-output/
 # =============================================================================
 docs/superpowers/
 .superpowers/
+
+# =============================================================================
+# Personal financial context — injected into AI prompts, contains private info
+# =============================================================================
+context.md
+
+# =============================================================================
+# Compiled binaries
+# =============================================================================
+/bin/
+/scrape

@@ -1,0 +1,26 @@
+# Personal Financial Context
+
+This file is injected into every AI analysis prompt as background context about how your
+finances are structured. Copy it to context.md (gitignored) and fill in your own details.
+
+---
+
+## Income
+
+- Describe your income sources and any patterns that might look unusual (e.g. split payroll
+  deposits, freelance payments, irregular amounts).
+
+## Account Structure
+
+- Describe which accounts are for operating/spending vs. holding/savings.
+- Note any internal transfer patterns that should NOT be counted as income or expenses
+  (e.g. vault movements, cross-account shuffles, credit card payments).
+
+## Recurring / Expected Charges
+
+- List any charges that appear multiple times per billing cycle and are expected
+  (e.g. usage-based API billing, split subscription charges).
+
+## Investments
+
+- Note any transfers that are investment contributions and should not be treated as expenses.

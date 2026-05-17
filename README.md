@@ -98,7 +98,22 @@ cp .env.example .env
 # Set DATABASE_URL and ANTHROPIC_API_KEY
 ```
 
-### 4. Build
+### 4. (Optional) Add personal financial context
+
+Create a  in the project root to give Claude background about how your finances
+are structured — things like how payroll is split, which accounts are for transfers vs.
+spending, or recurring charges that are expected. This file is gitignored and injected into
+every analysis prompt automatically.
+
+```bash
+cp context.md.example context.md   # see the example for the expected format
+# Edit context.md with your own details
+```
+
+If the file is absent, frank runs without any personal context — the AI will still work
+but may flag intentional patterns as anomalies.
+
+### 5. Build
 
 ```bash
 go build ./...
@@ -107,15 +122,13 @@ go build ./...
 ### 5. Run a dry-run insight (no API call)
 
 ```bash
-DATABASE_URL="postgresql://frank:frank@localhost:5432/frank?sslmode=disable" \
-go run ./cmd/insights --period biweekly --dry-run
+op run --env-file=.env.tpl -- go run ./cmd/insights --period biweekly --dry-run
 ```
 
 ### 6. Run a full insight
 
 ```bash
-DATABASE_URL="postgresql://..." ANTHROPIC_API_KEY="sk-ant-..." \
-go run ./cmd/insights --period biweekly --thinking-budget 5000
+op run --env-file=.env.tpl -- go run ./cmd/insights --period biweekly
 ```
 
 ---
