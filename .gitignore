@@ -67,13 +67,57 @@ coverage/
 .nyc_output/
 
 # =============================================================================
+# Go
+# =============================================================================
+# Compiled binaries
+/bin/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+# Test cache and coverage
+*.test
+*.out
+/vendor/
+
+# =============================================================================
+# Python
+# =============================================================================
+__pycache__/
+*.py[cod]
+*$py.class
+
+# =============================================================================
+# Scrapers — bank automation scripts (ToS-sensitive, kept private)
+# =============================================================================
+scrapers/
+
+# =============================================================================
+# Data — raw scraper output, session state, eval records (contains real transactions)
+# =============================================================================
+data/
+
+# =============================================================================
+# Playwright / browser automation
+# =============================================================================
+# Persistent Chrome profile used for Chase device trust — contains session cookies
+chrome-profile/
+# Playwright trace files
+playwright-report/
+test-results/
+
+# =============================================================================
 # AI assistant internals
 # =============================================================================
 .serena/
 .claude/
+.firecrawl/
+_bmad/
+_bmad-output/
 
 # =============================================================================
-# Implementation plans (AI-generated, not for public repo)
+# AI-generated planning / research artifacts (not source code)
 # =============================================================================
-docs/superpowers/plans/
+docs/superpowers/
 .superpowers/
