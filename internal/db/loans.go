@@ -10,28 +10,28 @@ import (
 )
 
 type Loan struct {
-	ID              string
-	Name            string
-	Lender          string
-	OriginalAmount  float64
-	InterestRate    float64 // annual, as decimal (e.g. 0.02875)
-	TermMonths      int
-	MinimumPayment  float64
-	OriginationDate time.Time
-	AccountSource   string
-	Notes           string
+	ID              string    `json:"id"`
+	Name            string    `json:"name"`
+	Lender          string    `json:"lender"`
+	OriginalAmount  float64   `json:"original_amount"`
+	InterestRate    float64   `json:"interest_rate"` // annual, as decimal (e.g. 0.02875)
+	TermMonths      int       `json:"term_months"`
+	MinimumPayment  float64   `json:"minimum_payment"`
+	OriginationDate time.Time `json:"origination_date"`
+	AccountSource   string    `json:"account_source"`
+	Notes           string    `json:"notes"`
 }
 
 type CreditAccount struct {
-	ID             string
-	Name           string
-	Lender         string
-	CreditLimit    float64
-	CurrentBalance float64
-	InterestRate   float64 // APR as decimal
-	MinimumPayment float64
-	DueDay         int
-	Notes          string
+	ID             string  `json:"id"`
+	Name           string  `json:"name"`
+	Lender         string  `json:"lender"`
+	CreditLimit    float64 `json:"credit_limit"`
+	CurrentBalance float64 `json:"current_balance"`
+	InterestRate   float64 `json:"interest_rate"` // APR as decimal
+	MinimumPayment float64 `json:"minimum_payment"`
+	DueDay         int     `json:"due_day"`
+	Notes          string  `json:"notes"`
 }
 
 // EstimatedBalance computes the remaining loan balance as of asOf using standard

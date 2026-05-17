@@ -22,7 +22,19 @@ You must respond with valid JSON in exactly this structure:
   "key_findings": ["<finding 1>", "<finding 2>", "<finding 3>", ...]
 }
 
-key_findings should be 3-5 items: specific observations with numbers, anomalies, recurring charges worth noting, or trends. Do not pad with generic advice.`
+key_findings should be 3-5 items: specific observations with numbers, anomalies, recurring charges worth noting, or trends. Do not pad with generic advice.
+
+If active goals are present, comment on progress toward each one in the narrative and include at least one concrete, specific suggestion per goal in key_findings.`
+
+type GoalContext struct {
+	Description  string
+	Type         string
+	Horizon      string
+	TargetValue  *float64
+	Category     string
+	CurrentValue *float64 // nil for free_text
+	Unit         string   // "%" for savings_rate, "$" for spending_cap
+}
 
 type PeriodSummary struct {
 	PeriodType     string
@@ -31,6 +43,7 @@ type PeriodSummary struct {
 	Transactions   []db.Transaction
 	Loans          []db.Loan          // populated for yearly period only
 	CreditAccounts []db.CreditAccount // populated for yearly period only
+	Goals          []GoalContext
 }
 
 func BuildPrompts(p PeriodSummary, userContext string) (system, user string) {
@@ -135,6 +148,21 @@ func BuildPrompts(p PeriodSummary, userContext string) (system, user string) {
 			}
 			sb.WriteString("\n")
 		}
+	}
+
+	if len(p.Goals) > 0 {
+		sb.WriteString("Active goals:\n")
+		for _, g := range p.Goals {
+			line := fmt.Sprintf("  [%s / %s] %s", g.Type, g.Horizon, g.Description)
+			if g.TargetValue != nil && g.CurrentValue != nil {
+				line += fmt.Sprintf(" — target: %s%.2f, current: %s%.2f",
+					g.Unit, *g.TargetValue, g.Unit, *g.CurrentValue)
+			} else if g.TargetValue != nil {
+				line += fmt.Sprintf(" — target: %s%.2f", g.Unit, *g.TargetValue)
+			}
+			sb.WriteString(line + "\n")
+		}
+		sb.WriteString("\n")
 	}
 
 	sb.WriteString("All transactions:\n")

@@ -28,8 +28,11 @@ type Config struct {
 }
 
 type Result struct {
-	RawAnalysis string
-	KeyFindings []string
+	RawAnalysis  string
+	KeyFindings  []string
+	ThinkingText string
+	InputTokens  int
+	OutputTokens int
 }
 
 // insightJSON is the JSON structure Claude is instructed to return.
@@ -91,8 +94,11 @@ func Generate(ctx context.Context, analyzer Analyzer, cfg Config, period PeriodS
 	}
 
 	result := Result{
-		RawAnalysis: parsed.RawAnalysis,
-		KeyFindings: parsed.KeyFindings,
+		RawAnalysis:  parsed.RawAnalysis,
+		KeyFindings:  parsed.KeyFindings,
+		ThinkingText: analysisResult.ThinkingText,
+		InputTokens:  analysisResult.InputTokens,
+		OutputTokens: analysisResult.OutputTokens,
 	}
 
 	evalIn := evals.Input{

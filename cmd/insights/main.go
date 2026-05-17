@@ -92,6 +92,12 @@ func main() {
 		p.CreditAccounts = credits
 	}
 
+	goals, err := db.FetchActiveGoals(ctx, pool)
+	if err != nil {
+		log.Fatalf("fetch goals: %v", err)
+	}
+	p.Goals = insights.BuildGoalContexts(goals, p)
+
 	if *dryRun {
 		sys, user := insights.BuildPrompts(p, "")
 		fmt.Println("=== SYSTEM PROMPT ===")
@@ -119,11 +125,15 @@ func main() {
 
 	// Write insight to DB
 	ins := db.Insight{
-		PeriodStart: start,
-		PeriodEnd:   end,
-		PeriodType:  *period,
-		RawAnalysis: result.RawAnalysis,
-		KeyFindings: result.KeyFindings,
+		PeriodStart:  start,
+		PeriodEnd:    end,
+		PeriodType:   *period,
+		RawAnalysis:  result.RawAnalysis,
+		KeyFindings:  result.KeyFindings,
+		ThinkingText: result.ThinkingText,
+		Model:        cfg.Model,
+		InputTokens:  result.InputTokens,
+		OutputTokens: result.OutputTokens,
 	}
 	if err := db.InsertInsight(ctx, pool, ins); err != nil {
 		log.Fatalf("insert insight: %v", err)
