@@ -112,3 +112,15 @@ Eval records are written to `data/evals/<timestamp>_insights.jsonl` (excluded fr
 - Error wrapping: always `fmt.Errorf("context: %w", err)`, never bare `err`
 - No boilerplate comments — only document non-obvious constraints
 - Tests: standard library `testing` package, no third-party assertion libraries
+
+---
+
+## AI Prompt Notes
+
+### Extended thinking
+
+Not worth the token cost for current prompts (paydown coach, insights, categorization) — these are structured JSON generation tasks where prompt and data quality are the ceiling, not reasoning depth.
+
+**Enable it when implementing the yearly financial review prompt.** Synthesizing 12 months of transactions + all debt + goals into a forward-looking financial plan is the kind of compound reasoning task where extended thinking budget earns its cost.
+
+Note for local LLM migration: thinking traces don't transfer between models. What helps local LLM tuning is high-quality prompt/response pairs with clean structured outputs — which frank already generates.
