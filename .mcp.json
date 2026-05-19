@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "postgres": {
+      "command": "uvx",
+      "args": [
+        "postgres-mcp",
+        "postgresql://frank:frank@localhost:5432/frank?sslmode=disable",
+        "--access-mode",
+        "unrestricted"
+      ]
+    }
+  }
+}

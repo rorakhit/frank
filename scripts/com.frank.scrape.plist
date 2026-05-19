@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.frank.scrape</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>FRANK_DIR/scripts/run-scrape.sh</string>
+  </array>
+
+  <!-- Run at 8am daily. If the Mac was asleep, fires on next wake. -->
+  <key>StartCalendarInterval</key>
+  <dict>
+    <key>Hour</key>
+    <integer>8</integer>
+    <key>Minute</key>
+    <integer>0</integer>
+  </dict>
+
+  <key>StandardOutPath</key>
+  <string>HOME_DIR/Library/Logs/frank/launchd-scrape.log</string>
+  <key>StandardErrorPath</key>
+  <string>HOME_DIR/Library/Logs/frank/launchd-scrape.log</string>
+
+  <key>RunAtLoad</key>
+  <false/>
+</dict>
+</plist>
