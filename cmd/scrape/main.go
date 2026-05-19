@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"flag"
 	"fmt"
+	"io"
 	"log"
 	"net/smtp"
 	"os"
@@ -29,9 +30,34 @@ var scrapers = []scraper{
 	{"chase", "scrapers/chase.py"},
 }
 
+func setupLogFile() (*os.File, io.Writer) {
+	logDir := filepath.Join(os.Getenv("HOME"), "Library", "Logs", "frank")
+	if err := os.MkdirAll(logDir, 0755); err != nil {
+		log.Printf("could not create log dir %s: %v — logging to stdout only", logDir, err)
+		return nil, os.Stdout
+	}
+	logPath := filepath.Join(logDir, "scrape-"+time.Now().Format("2006-01-02")+".log")
+	f, err := os.OpenFile(logPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
+	if err != nil {
+		log.Printf("could not open log file %s: %v — logging to stdout only", logPath, err)
+		return nil, os.Stdout
+	}
+	fmt.Fprintf(f, "\n=== frank scrape started at %s ===\n", time.Now().Format(time.RFC3339))
+	return f, io.MultiWriter(os.Stdout, f)
+}
+
 func main() {
 	days := flag.Int("days", 30, "Days of history to fetch")
 	flag.Parse()
+
+	logFile, out := setupLogFile()
+	if logFile != nil {
+		defer func() {
+			fmt.Fprintf(logFile, "=== frank scrape ended at %s ===\n", time.Now().Format(time.RFC3339))
+			logFile.Close()
+		}()
+	}
+	log.SetOutput(out)
 
 	root := projectRoot()
 
@@ -45,13 +71,14 @@ func main() {
 	for _, s := range scrapers {
 		s := s
 		g.Go(func() error {
-			return runOne(ctx, root, etlBin, s.source, s.script, *days)
+			return runOne(ctx, root, etlBin, s.source, s.script, *days, out)
 		})
 	}
 
+	logRef := filepath.Join("~/Library/Logs/frank", "scrape-"+time.Now().Format("2006-01-02")+".log")
 	if err := g.Wait(); err != nil {
-		msg := fmt.Sprintf("frank scrape failed at %s: %v\n\nCheck ~/Library/Logs/frank/scrape-error.log for details.",
-			time.Now().Format(time.RFC3339), err)
+		msg := fmt.Sprintf("frank scrape failed at %s: %v\n\nCheck %s for details.",
+			time.Now().Format(time.RFC3339), err, logRef)
 		if alertErr := sendEmail("[frank] Scrape failed", msg); alertErr != nil {
 			log.Printf("alert email failed: %v", alertErr)
 		}
@@ -67,27 +94,27 @@ func main() {
 	if err := sendEmail("[frank] Scrape succeeded", msg); err != nil {
 		log.Printf("success email failed: %v", err)
 	}
-	fmt.Println("All scrapers and ETL runs completed successfully.")
+	fmt.Fprintln(out, "All scrapers and ETL runs completed successfully.")
 }
 
-func runOne(ctx context.Context, root, etlBin, source, script string, days int) error {
-	fmt.Printf("[%s] Starting scraper...\n", source)
+func runOne(ctx context.Context, root, etlBin, source, script string, days int, out io.Writer) error {
+	fmt.Fprintf(out, "[%s] Starting scraper...\n", source)
 	scrapeCmd := exec.CommandContext(ctx, "python3", filepath.Join(root, script), "--days", strconv.Itoa(days))
-	scrapeCmd.Stdout = os.Stdout
-	scrapeCmd.Stderr = os.Stderr
+	scrapeCmd.Stdout = out
+	scrapeCmd.Stderr = out
 	if err := scrapeCmd.Run(); err != nil {
 		return fmt.Errorf("%s scraper: %w", source, err)
 	}
 
-	fmt.Printf("[%s] Scraper done — running ETL...\n", source)
+	fmt.Fprintf(out, "[%s] Scraper done — running ETL...\n", source)
 	etlCmd := exec.CommandContext(ctx, etlBin, "--source", source)
-	etlCmd.Stdout = os.Stdout
-	etlCmd.Stderr = os.Stderr
+	etlCmd.Stdout = out
+	etlCmd.Stderr = out
 	if err := etlCmd.Run(); err != nil {
 		return fmt.Errorf("%s etl: %w", source, err)
 	}
 
-	fmt.Printf("[%s] Done.\n", source)
+	fmt.Fprintf(out, "[%s] Done.\n", source)
 	return nil
 }
 
