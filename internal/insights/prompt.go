@@ -57,6 +57,9 @@ func BuildPrompts(p PeriodSummary, userContext string) (system, user string) {
 	var recurring []db.Transaction
 
 	for _, tx := range p.Transactions {
+		if tx.IsInternal {
+			continue
+		}
 		if tx.IsIncome || tx.Direction == "credit" {
 			totalIncome += tx.Amount
 		} else {
@@ -94,7 +97,11 @@ func BuildPrompts(p PeriodSummary, userContext string) (system, user string) {
 	if len(recurring) > 0 {
 		sb.WriteString("Recurring charges this period:\n")
 		for _, tx := range recurring {
-			fmt.Fprintf(&sb, "  %-35s $%.2f\n", tx.Description, tx.Amount)
+			line := fmt.Sprintf("  %-35s $%.2f", tx.Description, tx.Amount)
+			if tx.Notes != "" {
+				line += fmt.Sprintf("  [note: %s]", tx.Notes)
+			}
+			sb.WriteString(line + "\n")
 		}
 		sb.WriteString("\n")
 	}
@@ -177,13 +184,17 @@ func BuildPrompts(p PeriodSummary, userContext string) (system, user string) {
 		if cat == "" {
 			cat = "—"
 		}
-		fmt.Fprintf(&sb, "%-12s  %s$%-7.2f  %-35s  %s\n",
+		line := fmt.Sprintf("%-12s  %s$%-7.2f  %-35s  %s",
 			tx.Date.Format("2006-01-02"),
 			sign,
 			tx.Amount,
 			truncate(tx.Description, 35),
 			cat,
 		)
+		if tx.Notes != "" {
+			line += fmt.Sprintf("  [note: %s]", tx.Notes)
+		}
+		sb.WriteString(line + "\n")
 	}
 
 	sb.WriteString("\nAnalyze this period and respond with JSON as instructed.")

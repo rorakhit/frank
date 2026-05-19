@@ -9,13 +9,27 @@ import (
 )
 
 type Transaction struct {
-	Date        time.Time
-	Amount      float64
-	Direction   string // "debit" | "credit"
-	Description string
-	Category    string
-	IsIncome    bool
-	IsRecurring bool
+	ID          string    `json:"id"`
+	Date        time.Time `json:"date"`
+	Amount      float64   `json:"amount"`
+	Direction   string    `json:"direction"` // "debit" | "credit"
+	Description string    `json:"description"`
+	Category    string    `json:"category"`
+	IsIncome    bool      `json:"is_income"`
+	IsRecurring bool      `json:"is_recurring"`
+	IsInternal  bool      `json:"is_internal"`
+	Notes       string    `json:"notes"`
+}
+
+type CategorizationRule struct {
+	ID          string    `json:"id"`
+	Pattern     string    `json:"pattern"`
+	Category    string    `json:"category"`
+	IsRecurring bool      `json:"is_recurring"`
+	Cadence     string    `json:"cadence"`
+	IsInternal  bool      `json:"is_internal"`
+	Notes       string    `json:"notes"`
+	CreatedAt   time.Time `json:"created_at"`
 }
 
 type Insight struct {
@@ -57,13 +71,16 @@ type Goal struct {
 func FetchTransactions(ctx context.Context, pool *pgxpool.Pool, start, end time.Time) ([]Transaction, error) {
 	rows, err := pool.Query(ctx, `
 		SELECT
+			t.id,
 			t.date,
 			t.amount::float8,
 			t.direction,
 			COALESCE(t.description_normal, t.description, ''),
 			COALESCE(t.category, ''),
 			t.is_income,
-			t.is_recurring
+			t.is_recurring,
+			t.is_internal,
+			t.notes
 		FROM transactions t
 		WHERE t.date >= $1
 		  AND t.date <= $2
@@ -79,15 +96,110 @@ func FetchTransactions(ctx context.Context, pool *pgxpool.Pool, start, end time.
 	for rows.Next() {
 		var tx Transaction
 		if err := rows.Scan(
-			&tx.Date, &tx.Amount, &tx.Direction,
+			&tx.ID, &tx.Date, &tx.Amount, &tx.Direction,
 			&tx.Description, &tx.Category,
-			&tx.IsIncome, &tx.IsRecurring,
+			&tx.IsIncome, &tx.IsRecurring, &tx.IsInternal,
+			&tx.Notes,
 		); err != nil {
 			return nil, fmt.Errorf("scan transaction: %w", err)
 		}
 		txns = append(txns, tx)
 	}
 	return txns, rows.Err()
+}
+
+func ListCategorizationRules(ctx context.Context, pool *pgxpool.Pool) ([]CategorizationRule, error) {
+	rows, err := pool.Query(ctx, `
+		SELECT id, pattern, category, is_recurring, cadence, is_internal, notes, created_at
+		FROM categorization_rules
+		ORDER BY created_at ASC
+	`)
+	if err != nil {
+		return nil, fmt.Errorf("list categorization rules: %w", err)
+	}
+	defer rows.Close()
+
+	rules := []CategorizationRule{}
+	for rows.Next() {
+		var r CategorizationRule
+		if err := rows.Scan(&r.ID, &r.Pattern, &r.Category, &r.IsRecurring, &r.Cadence, &r.IsInternal, &r.Notes, &r.CreatedAt); err != nil {
+			return nil, fmt.Errorf("scan rule: %w", err)
+		}
+		rules = append(rules, r)
+	}
+	return rules, rows.Err()
+}
+
+func UpsertCategorizationRule(ctx context.Context, pool *pgxpool.Pool, r CategorizationRule) (CategorizationRule, error) {
+	var created CategorizationRule
+	err := pool.QueryRow(ctx, `
+		INSERT INTO categorization_rules (pattern, category, is_recurring, cadence, is_internal, notes)
+		VALUES ($1, $2, $3, $4, $5, $6)
+		RETURNING id, pattern, category, is_recurring, cadence, is_internal, notes, created_at
+	`, r.Pattern, r.Category, r.IsRecurring, r.Cadence, r.IsInternal, r.Notes).Scan(
+		&created.ID, &created.Pattern, &created.Category,
+		&created.IsRecurring, &created.Cadence, &created.IsInternal,
+		&created.Notes, &created.CreatedAt,
+	)
+	if err != nil {
+		return CategorizationRule{}, fmt.Errorf("insert categorization rule: %w", err)
+	}
+	return created, nil
+}
+
+func UpdateCategorizationRule(ctx context.Context, pool *pgxpool.Pool, id string, r CategorizationRule) (CategorizationRule, error) {
+	var updated CategorizationRule
+	err := pool.QueryRow(ctx, `
+		UPDATE categorization_rules
+		SET pattern=$2, category=$3, is_recurring=$4, cadence=$5, is_internal=$6, notes=$7
+		WHERE id=$1
+		RETURNING id, pattern, category, is_recurring, cadence, is_internal, notes, created_at
+	`, id, r.Pattern, r.Category, r.IsRecurring, r.Cadence, r.IsInternal, r.Notes).Scan(
+		&updated.ID, &updated.Pattern, &updated.Category,
+		&updated.IsRecurring, &updated.Cadence, &updated.IsInternal,
+		&updated.Notes, &updated.CreatedAt,
+	)
+	if err != nil {
+		return CategorizationRule{}, fmt.Errorf("update categorization rule %q: %w", id, err)
+	}
+	return updated, nil
+}
+
+func DeleteCategorizationRule(ctx context.Context, pool *pgxpool.Pool, id string) error {
+	tag, err := pool.Exec(ctx, `DELETE FROM categorization_rules WHERE id = $1`, id)
+	if err != nil {
+		return fmt.Errorf("delete categorization rule %q: %w", id, err)
+	}
+	if tag.RowsAffected() == 0 {
+		return fmt.Errorf("rule %q not found", id)
+	}
+	return nil
+}
+
+// ApplyCategorizationRules applies all rules to the transactions table using ILIKE pattern matching.
+// It updates category, is_recurring, cadence, and is_internal on matching rows.
+func ApplyCategorizationRules(ctx context.Context, pool *pgxpool.Pool) (int64, error) {
+	rules, err := ListCategorizationRules(ctx, pool)
+	if err != nil {
+		return 0, err
+	}
+
+	var total int64
+	for _, r := range rules {
+		tag, err := pool.Exec(ctx, `
+			UPDATE transactions SET
+				category    = CASE WHEN $2 != '' THEN $2 ELSE category END,
+				is_recurring = CASE WHEN $3 THEN true ELSE is_recurring END,
+				is_internal  = CASE WHEN $4 THEN true ELSE is_internal END
+			WHERE description ILIKE '%' || $1 || '%'
+			   OR raw_type ILIKE '%' || $1 || '%'
+		`, r.Pattern, r.Category, r.IsRecurring, r.IsInternal)
+		if err != nil {
+			return total, fmt.Errorf("apply rule %q: %w", r.Pattern, err)
+		}
+		total += tag.RowsAffected()
+	}
+	return total, nil
 }
 
 type Institution struct {
@@ -110,7 +222,7 @@ func ListInstitutions(ctx context.Context, pool *pgxpool.Pool) ([]Institution, e
 	}
 	defer rows.Close()
 
-	var institutions []Institution
+	institutions := []Institution{}
 	for rows.Next() {
 		var inst Institution
 		if err := rows.Scan(
@@ -154,7 +266,7 @@ func ListInsights(ctx context.Context, pool *pgxpool.Pool) ([]Insight, error) {
 	}
 	defer rows.Close()
 
-	var insights []Insight
+	insights := []Insight{}
 	for rows.Next() {
 		var ins Insight
 		var findings []string
@@ -193,7 +305,7 @@ func ListAccounts(ctx context.Context, pool *pgxpool.Pool) ([]Account, error) {
 	}
 	defer rows.Close()
 
-	var accounts []Account
+	accounts := []Account{}
 	for rows.Next() {
 		var acct Account
 		if err := rows.Scan(
@@ -282,7 +394,7 @@ func DeactivateGoal(ctx context.Context, pool *pgxpool.Pool, id string) error {
 }
 
 func scanGoals(rows interface{ Next() bool; Scan(...any) error; Err() error }) ([]Goal, error) {
-	var goals []Goal
+	goals := []Goal{}
 	for rows.Next() {
 		var g Goal
 		if err := rows.Scan(
@@ -296,9 +408,144 @@ func scanGoals(rows interface{ Next() bool; Scan(...any) error; Err() error }) (
 	return goals, rows.Err()
 }
 
+type CategorizationSuggestion struct {
+	ID                     string     `json:"id"`
+	SuggestionType         string     `json:"suggestion_type"` // "transaction" | "rule"
+	Status                 string     `json:"status"`          // "pending" | "approved" | "dismissed"
+	TransactionDescription *string    `json:"transaction_description"`
+	TransactionDate        *string    `json:"transaction_date"`
+	TransactionAmount      *float64   `json:"transaction_amount"`
+	TransactionDirection   *string    `json:"transaction_direction"`
+	Pattern                *string    `json:"pattern"`
+	Category               string     `json:"category"`
+	IsRecurring            bool       `json:"is_recurring"`
+	Cadence                string     `json:"cadence"`
+	IsInternal             bool       `json:"is_internal"`
+	Confidence             int        `json:"confidence"`
+	Notes                  string     `json:"notes"`
+	CreatedAt              time.Time  `json:"created_at"`
+	ReviewedAt             *time.Time `json:"reviewed_at"`
+}
+
+func ClearReviewedSuggestions(ctx context.Context, pool *pgxpool.Pool) error {
+	_, err := pool.Exec(ctx, `DELETE FROM categorization_suggestions WHERE status != 'pending'`)
+	return err
+}
+
+func InsertSuggestions(ctx context.Context, pool *pgxpool.Pool, suggestions []CategorizationSuggestion) error {
+	for _, s := range suggestions {
+		_, err := pool.Exec(ctx, `
+			INSERT INTO categorization_suggestions
+				(suggestion_type, transaction_description, transaction_date, transaction_amount,
+				 transaction_direction, pattern, category, is_recurring, cadence, is_internal, confidence, notes)
+			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+		`, s.SuggestionType, s.TransactionDescription, s.TransactionDate, s.TransactionAmount,
+			s.TransactionDirection, s.Pattern, s.Category, s.IsRecurring, s.Cadence,
+			s.IsInternal, s.Confidence, s.Notes)
+		if err != nil {
+			return fmt.Errorf("insert suggestion: %w", err)
+		}
+	}
+	return nil
+}
+
+func ListPendingSuggestions(ctx context.Context, pool *pgxpool.Pool) ([]CategorizationSuggestion, error) {
+	rows, err := pool.Query(ctx, `
+		SELECT id, suggestion_type, status,
+			transaction_description, transaction_date, transaction_amount::float8, transaction_direction,
+			pattern, category, is_recurring, cadence, is_internal, confidence, notes, created_at, reviewed_at
+		FROM categorization_suggestions
+		WHERE status = 'pending'
+		ORDER BY suggestion_type, confidence DESC, created_at ASC
+	`)
+	if err != nil {
+		return nil, fmt.Errorf("list pending suggestions: %w", err)
+	}
+	defer rows.Close()
+
+	out := []CategorizationSuggestion{}
+	for rows.Next() {
+		var s CategorizationSuggestion
+		var txDate *string
+		if err := rows.Scan(
+			&s.ID, &s.SuggestionType, &s.Status,
+			&s.TransactionDescription, &txDate, &s.TransactionAmount, &s.TransactionDirection,
+			&s.Pattern, &s.Category, &s.IsRecurring, &s.Cadence, &s.IsInternal,
+			&s.Confidence, &s.Notes, &s.CreatedAt, &s.ReviewedAt,
+		); err != nil {
+			return nil, fmt.Errorf("scan suggestion: %w", err)
+		}
+		s.TransactionDate = txDate
+		out = append(out, s)
+	}
+	return out, rows.Err()
+}
+
+func ApproveSuggestion(ctx context.Context, pool *pgxpool.Pool, id string) (CategorizationSuggestion, error) {
+	var s CategorizationSuggestion
+	var txDate *string
+	err := pool.QueryRow(ctx, `
+		UPDATE categorization_suggestions SET status='approved', reviewed_at=now()
+		WHERE id=$1 AND status='pending'
+		RETURNING id, suggestion_type, status,
+			transaction_description, transaction_date, transaction_amount::float8, transaction_direction,
+			pattern, category, is_recurring, cadence, is_internal, confidence, notes, created_at, reviewed_at
+	`, id).Scan(
+		&s.ID, &s.SuggestionType, &s.Status,
+		&s.TransactionDescription, &txDate, &s.TransactionAmount, &s.TransactionDirection,
+		&s.Pattern, &s.Category, &s.IsRecurring, &s.Cadence, &s.IsInternal,
+		&s.Confidence, &s.Notes, &s.CreatedAt, &s.ReviewedAt,
+	)
+	if err != nil {
+		return CategorizationSuggestion{}, fmt.Errorf("approve suggestion %q: %w", id, err)
+	}
+	s.TransactionDate = txDate
+
+	// Write through: apply the approved suggestion to the live tables
+	if s.SuggestionType == "transaction" && s.TransactionDescription != nil {
+		_, err = pool.Exec(ctx, `
+			UPDATE transactions SET
+				category     = CASE WHEN $2 != '' THEN $2 ELSE category END,
+				is_recurring = CASE WHEN $3 THEN true ELSE is_recurring END,
+				is_internal  = CASE WHEN $4 THEN true ELSE is_internal END
+			WHERE COALESCE(description_normal, description) ILIKE $1
+			  AND (category IS NULL OR category = '')
+		`, "%"+*s.TransactionDescription+"%", s.Category, s.IsRecurring, s.IsInternal)
+		if err != nil {
+			return s, fmt.Errorf("apply transaction suggestion: %w", err)
+		}
+	}
+	return s, nil
+}
+
+func DismissSuggestion(ctx context.Context, pool *pgxpool.Pool, id string) error {
+	tag, err := pool.Exec(ctx, `
+		UPDATE categorization_suggestions SET status='dismissed', reviewed_at=now()
+		WHERE id=$1 AND status='pending'
+	`, id)
+	if err != nil {
+		return fmt.Errorf("dismiss suggestion %q: %w", id, err)
+	}
+	if tag.RowsAffected() == 0 {
+		return fmt.Errorf("suggestion %q not found or already reviewed", id)
+	}
+	return nil
+}
+
 func nullStr(s string) *string {
 	if s == "" {
 		return nil
 	}
 	return &s
+}
+
+func SetTransactionNote(ctx context.Context, pool *pgxpool.Pool, id, note string) error {
+	tag, err := pool.Exec(ctx, `UPDATE transactions SET notes = $2 WHERE id = $1`, id, note)
+	if err != nil {
+		return fmt.Errorf("set transaction note %q: %w", id, err)
+	}
+	if tag.RowsAffected() == 0 {
+		return fmt.Errorf("transaction %q not found", id)
+	}
+	return nil
 }

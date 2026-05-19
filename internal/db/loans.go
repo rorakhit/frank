@@ -92,7 +92,7 @@ func ListLoans(ctx context.Context, pool *pgxpool.Pool) ([]Loan, error) {
 	}
 	defer rows.Close()
 
-	var loans []Loan
+	loans := []Loan{}
 	for rows.Next() {
 		var l Loan
 		if err := rows.Scan(
@@ -121,7 +121,7 @@ func ListCreditAccounts(ctx context.Context, pool *pgxpool.Pool) ([]CreditAccoun
 	}
 	defer rows.Close()
 
-	var accounts []CreditAccount
+	accounts := []CreditAccount{}
 	for rows.Next() {
 		var a CreditAccount
 		if err := rows.Scan(
