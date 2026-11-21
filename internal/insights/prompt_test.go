@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/rorakhit/frank/internal/db"
 )
@@ -335,11 +336,16 @@ func TestTruncate(t *testing.T) {
 		{"exactly10c", 10, "exactly10c"},
 		{"this is a longer string", 10, "this is a…"},
 		{"", 5, ""},
+		{"café crème", 6, "café …"},
+		{"😀😁😂🤣", 3, "😀😁…"},
 	}
 	for _, c := range cases {
 		got := truncate(c.input, c.n)
 		if got != c.want {
 			t.Errorf("truncate(%q, %d) = %q, want %q", c.input, c.n, got, c.want)
+		}
+		if !utf8.ValidString(got) {
+			t.Errorf("truncate(%q, %d) returned invalid UTF-8: %q", c.input, c.n, got)
 		}
 	}
 }
